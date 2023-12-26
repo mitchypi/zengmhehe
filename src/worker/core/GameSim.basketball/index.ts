@@ -1879,6 +1879,10 @@ class GameSim extends GameSimBase {
 			if (this.allStarGame) {
 				probMake += 0.02;
 			}
+			//make myself better shooter
+			if(this.team[this.o].player[p].name == "Mitch Pi"){
+				probMake += 0.14;
+			}
 			probMake *= g.get("threePointAccuracyFactor");
 
 			this.playByPlay.logEvent({
@@ -1889,6 +1893,7 @@ class GameSim extends GameSimBase {
 				desperation: rushed && forceThreePointer,
 			});
 		} else {
+			
 			const r1 =
 				0.8 *
 				Math.random() *
@@ -1952,6 +1957,11 @@ class GameSim extends GameSimBase {
 			// Better shooting in the ASG, why not?
 			if (this.allStarGame) {
 				probMake += 0.1;
+			}
+
+			//make myself better finisher
+			if(this.team[this.o].player[p].name == "Mitch Pi"){
+				probMake += 0.21;
 			}
 
 			probMake *= g.get("twoPointAccuracyFactor");
