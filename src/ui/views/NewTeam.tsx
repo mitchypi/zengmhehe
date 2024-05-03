@@ -3,7 +3,95 @@ import { PHASE } from "../../common";
 import useTitleBar from "../hooks/useTitleBar";
 import { helpers, realtimeUpdate, toWorker } from "../util";
 import type { View } from "../../common/types";
-import { PopText, RecordAndPlayoffs } from "../components";
+import {
+	PlayerNameLabels,
+	PopText,
+	RecordAndPlayoffs,
+	SafeHtml,
+} from "../components";
+import classNames from "classnames";
+
+const HistoryBlock = ({
+	won,
+	lost,
+	tied,
+	otl,
+	winp,
+	finalsAppearances,
+	championships,
+	lastChampionship,
+	userOrTotal,
+}: View<"newTeam">["teams"][number]["total"] & {
+	userOrTotal: "user" | "total";
+}) => {
+	return (
+		<div>
+			<h4>{userOrTotal === "user" ? "Under your control" : "Total"}</h4>
+			Record:{" "}
+			{helpers.formatRecord({
+				won,
+				lost,
+				otl,
+				tied,
+			})}{" "}
+			({helpers.roundWinp(winp)})<br />
+			Finals record: {championships}-{finalsAppearances - championships}
+			<br />
+			Last championship:{" "}
+			{lastChampionship === undefined ? (
+				<span className="text-danger">never</span>
+			) : (
+				lastChampionship
+			)}
+		</div>
+	);
+};
+
+const PlayerList = ({
+	challengeNoRatings,
+	players,
+	season,
+}: {
+	challengeNoRatings: boolean;
+	players: any[];
+	season: number;
+}) => {
+	if (players.length === 0) {
+		return <p>None</p>;
+	}
+
+	return (
+		<ol className="list-unstyled mb-0">
+			{players.map((p, i) => (
+				<li
+					key={p.pid}
+					className={classNames({
+						"mt-2": i > 0,
+					})}
+				>
+					<span className="p-1">
+						<PlayerNameLabels
+							pid={p.pid}
+							season={season}
+							pos={p.ratings.pos}
+							skills={p.ratings.skills}
+							watch={p.watch}
+							firstName={p.firstName}
+							lastName={p.lastName}
+						/>
+					</span>
+					<br />
+					{!challengeNoRatings ? (
+						<>
+							{p.ratings.ovr} ovr, {p.ratings.pot} pot,{" "}
+						</>
+					) : null}
+					{p.age} yo
+				</li>
+			))}
+		</ol>
+	);
+};
 
 const NewTeam = ({
 	challengeNoRatings,
@@ -16,6 +104,8 @@ const NewTeam = ({
 	numPlayoffRounds,
 	otherTeamsWantToHire,
 	phase,
+	playoffsByConf,
+	season,
 	teams,
 	userTid,
 }: View<"newTeam">) => {
@@ -180,18 +270,35 @@ const NewTeam = ({
 			</form>
 
 			{t ? (
-				<div className="d-flex mt-3">
+				<div className="d-flex flex-wrap mt-3 gap-3">
 					{t.imgURL ? (
-						<div
-							style={{ width: 128 }}
-							className="me-3 d-flex align-items-center justify-content-center"
-						>
-							<a href={helpers.leagueUrl(["roster", `${t.abbrev}_${t.tid}`])}>
-								<img className="mw-100 mh-100" src={t.imgURL} alt="Team logo" />
-							</a>
+						<div className="d-flex flex-column align-items-center gap-4">
+							<div style={{ width: 128 }}>
+								<a href={helpers.leagueUrl(["roster", `${t.abbrev}_${t.tid}`])}>
+									<img
+										className="mw-100 mh-100"
+										src={t.imgURL}
+										alt="Team logo"
+									/>
+								</a>
+							</div>
+							{t.imgURLSmall ? (
+								<div style={{ width: 32 }}>
+									<a
+										href={helpers.leagueUrl(["roster", `${t.abbrev}_${t.tid}`])}
+									>
+										<img
+											className="mw-100 mh-100"
+											src={t.imgURLSmall}
+											alt="Team logo"
+										/>
+									</a>
+								</div>
+							) : null}
 						</div>
 					) : null}
 					<div>
+						<h3>Team info</h3>
 						{expansion && t.tid !== userTid ? (
 							<>
 								New expansion team!
@@ -207,7 +314,7 @@ const NewTeam = ({
 									tied={t.seasonAttrs.tied}
 									otl={t.seasonAttrs.otl}
 									won={t.seasonAttrs.won}
-									numConfs={confs.length}
+									playoffsByConf={playoffsByConf}
 									numPlayoffRounds={numPlayoffRounds}
 									playoffRoundsWon={t.seasonAttrs.playoffRoundsWon}
 								/>
@@ -223,6 +330,34 @@ const NewTeam = ({
 						{confs[t.cid] ? confs[t.cid].name : null}
 						<br />
 						<PopText tid={tid} teams={teams} numActiveTeams={numActiveTeams} />
+
+						<h3 className="mt-4">Franchise history</h3>
+						<HistoryBlock {...t.total} userOrTotal="total" />
+						<div className="mt-2">
+							<HistoryBlock {...t.user} userOrTotal="user" />
+						</div>
+					</div>
+					<div className="d-flex flex-wrap gap-3">
+						<div>
+							<h3>Top players</h3>
+							<PlayerList
+								challengeNoRatings={challengeNoRatings}
+								players={t.players}
+								season={season}
+							/>
+						</div>
+						<div>
+							<h3>Upcoming draft picks</h3>
+							<ul className="list-unstyled mb-0">
+								{t.draftPicks.map((dp, i) => {
+									return (
+										<li key={i}>
+											<SafeHtml dirty={dp.desc} />
+										</li>
+									);
+								})}
+							</ul>
+						</div>
 					</div>
 				</div>
 			) : null}

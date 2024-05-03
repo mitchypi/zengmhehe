@@ -1,5 +1,4 @@
 import { AWARD_NAMES, bySport, isSport } from "../../common";
-import defaultGameAttributes from "../../common/defaultGameAttributes";
 import type { MinimalPlayerRatings, Player } from "../../common/types";
 import stats from "../core/player/stats";
 import { weightByMinutes } from "../db/getCopies/playersPlus";
@@ -70,12 +69,12 @@ const evaluate = (
 		  },
 ) => {
 	const MIN_GP_SEASON = bySport({
-		baseball: 40,
-		basketball: 20,
-		football: 7,
-		hockey: 20,
+		baseball: 5,
+		basketball: 10,
+		football: 5,
+		hockey: 10,
 	});
-	const MIN_GP_TOTAL = defaultGameAttributes.numGames[0].value;
+	const MIN_GP_TOTAL = MIN_GP_SEASON * 3;
 
 	const goatFormula =
 		formula ??
@@ -84,6 +83,24 @@ const evaluate = (
 			: g.get("goatSeasonFormula") ?? DEFAULT_FORMULA_SEASON);
 
 	const object: Record<string, number> = {};
+
+	const statsRows = p.stats.filter(row => {
+		if (info.type === "season" && row.season !== info.season) {
+			return false;
+		}
+
+		// Don't check row.min being 0, since that is true for some historical stats before 1952
+		if (row.gp === 0) {
+			return false;
+		}
+
+		return true;
+	});
+
+	// Ignore players with no valid stats, so there isn't weirdness like -ewaPeak being shown as Infinity
+	if (statsRows.length === 0) {
+		return -Infinity;
+	}
 
 	for (const stat of STAT_VARIABLES) {
 		const peak = `${stat}Peak`;
@@ -100,16 +117,7 @@ const evaluate = (
 		let minSum = 0;
 		let minSumPlayoffs = 0;
 
-		for (const row of p.stats) {
-			if (info.type === "season" && row.season !== info.season) {
-				continue;
-			}
-
-			// Don't check row.min being 0, since that is true for some historical stats before 1952
-			if (row.gp === 0) {
-				continue;
-			}
-
+		for (const row of statsRows) {
 			if (row.playoffs) {
 				if (weightStatByMinutes) {
 					object[playoffs] += row[stat] * row.min;
@@ -119,15 +127,13 @@ const evaluate = (
 				}
 			} else {
 				if (info.type === "career") {
-					if (row.gp >= MIN_GP_SEASON) {
-						if (row[stat] > object[peak]) {
-							object[peak] = row[stat];
-						}
+					if (row[stat] > object[peak]) {
+						object[peak] = row[stat];
+					}
 
-						const perGame = row[stat] / row.gp;
-						if (perGame > object[peakPerGame]) {
-							object[peakPerGame] = perGame;
-						}
+					const perGame = row[stat] / row.gp;
+					if (perGame > object[peakPerGame]) {
+						object[peakPerGame] = perGame;
 					}
 				}
 

@@ -12,6 +12,7 @@ import type {
 	ViewInput,
 } from "../../common/types";
 import { player, team } from "../core";
+import getPlayoffsByConf from "../core/season/getPlayoffsByConf";
 import { idb } from "../db";
 import { g, getTeamInfoBySeason, helpers } from "../util";
 import { assetIsPlayer, getPlayerFromPick } from "../util/formatEventText";
@@ -194,10 +195,6 @@ const getSeasonsToPlot = async (
 
 	const seasons = [];
 
-	const teamSeasonsIndex = idb.league
-		.transaction("teamSeasons")
-		.store.index("tid, season");
-
 	for (let i = start; i <= end; i++) {
 		type Team = {
 			winp?: number;
@@ -225,16 +222,13 @@ const getSeasonsToPlot = async (
 		];
 		for (let j = 0; j < tids.length; j++) {
 			const tid = tids[j];
-			let teamSeason;
-			if (i === g.get("season")) {
-				teamSeason = await idb.cache.teamSeasons.indexGet(
-					"teamSeasonsByTidSeason",
-					[tid, i],
-				);
-			}
-			if (!teamSeason) {
-				teamSeason = await teamSeasonsIndex.get([tid, i]);
-			}
+			const teamSeason = await idb.getCopy.teamSeasons(
+				{
+					season: i,
+					tid,
+				},
+				"noCopyCache",
+			);
 
 			if (
 				teamSeason &&
@@ -257,7 +251,10 @@ const getSeasonsToPlot = async (
 					region: teamSeason.region ?? g.get("teamInfoCache")[tid].region,
 					name: teamSeason.name ?? g.get("teamInfoCache")[tid].name,
 					abbrev: teamSeason.abbrev ?? g.get("teamInfoCache")[tid].abbrev,
-					roundsWonText: getRoundsWonText(teamSeason).toLocaleLowerCase(),
+					roundsWonText: getRoundsWonText(
+						teamSeason,
+						await getPlayoffsByConf(teamSeason.season),
+					).toLocaleLowerCase(),
 				};
 			}
 

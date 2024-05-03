@@ -8,6 +8,7 @@ import {
 	RatingWithChange,
 	RecordAndPlayoffs,
 } from "../components";
+import { arrow } from "./Trade/Summary";
 
 const PlayerList = ({
 	challengeNoRatings,
@@ -53,16 +54,31 @@ const PlayerList = ({
 							firstName={p.firstName}
 							lastName={p.lastName}
 						/>
-						<a
-							href={helpers.leagueUrl([
-								"roster",
-								`${p.abbrev}_${p.tid}`,
-								season,
-							])}
-							className="ms-2"
-						>
-							{p.abbrev}
-						</a>
+						<span className="ms-2">
+							{p.prevTid !== undefined ? (
+								<>
+									<a
+										href={helpers.leagueUrl([
+											"roster",
+											`${p.prevAbbrev}_${p.prevTid}`,
+											season - 1,
+										])}
+									>
+										{p.prevAbbrev}
+									</a>{" "}
+									{arrow}{" "}
+								</>
+							) : null}
+							<a
+								href={helpers.leagueUrl([
+									"roster",
+									`${p.abbrev}_${p.tid}`,
+									season,
+								])}
+							>
+								{p.abbrev}
+							</a>
+						</span>
 					</span>
 					<br />
 					{!challengeNoRatings ? (
@@ -94,15 +110,15 @@ const PlayerList = ({
 
 const TeamList = ({
 	challengeNoRatings,
-	numConfs,
 	numPlayoffRounds,
+	playoffsByConf,
 	teams,
 	season,
 	userTid,
 }: {
 	challengeNoRatings: boolean;
-	numConfs: number;
 	numPlayoffRounds: number;
+	playoffsByConf: boolean;
 	teams: View<"seasonPreview">["teamsTop"];
 	season: number;
 	userTid: number;
@@ -152,7 +168,7 @@ const TeamList = ({
 								abbrev={t.abbrev}
 								lost={t.lastSeason.lost}
 								option="noSeason"
-								numConfs={numConfs}
+								playoffsByConf={playoffsByConf}
 								numPlayoffRounds={numPlayoffRounds}
 								otl={t.lastSeason.otl}
 								playoffRoundsWon={t.lastSeason.playoffRoundsWon}
@@ -191,12 +207,13 @@ const TeamList = ({
 
 const SeasonPreview = ({
 	challengeNoRatings,
-	numConfs,
 	numPlayoffRounds,
 	playersDeclining,
 	playersImproving,
+	playersNewTeam,
 	playersTop,
 	playersTopRookies,
+	playoffsByConf,
 	season,
 	teamsDeclining,
 	teamsImproving,
@@ -213,7 +230,7 @@ const SeasonPreview = ({
 	return (
 		<>
 			<MoreLinks type="league" page="season_preview" />
-			<div style={{ maxWidth: 1200 }}>
+			<div style={{ maxWidth: 1400 }}>
 				<div className="row">
 					<div className="col-sm-6 col-md-4 col-lg-3">
 						<h2>Top Players</h2>
@@ -256,8 +273,8 @@ const SeasonPreview = ({
 						<h2>Top Teams</h2>
 						<TeamList
 							challengeNoRatings={challengeNoRatings}
-							numConfs={numConfs}
 							numPlayoffRounds={numPlayoffRounds}
+							playoffsByConf={playoffsByConf}
 							teams={teamsTop}
 							season={season}
 							userTid={userTid}
@@ -267,8 +284,8 @@ const SeasonPreview = ({
 						<h2>Improving Teams</h2>
 						<TeamList
 							challengeNoRatings={challengeNoRatings}
-							numConfs={numConfs}
 							numPlayoffRounds={numPlayoffRounds}
+							playoffsByConf={playoffsByConf}
 							teams={teamsImproving}
 							season={season}
 							userTid={userTid}
@@ -278,9 +295,18 @@ const SeasonPreview = ({
 						<h2>Declining Teams</h2>
 						<TeamList
 							challengeNoRatings={challengeNoRatings}
-							numConfs={numConfs}
 							numPlayoffRounds={numPlayoffRounds}
+							playoffsByConf={playoffsByConf}
 							teams={teamsDeclining}
+							season={season}
+							userTid={userTid}
+						/>
+					</div>
+					<div className="col-sm-6 col-md-4 col-lg-3">
+						<h2>Top Players on New Teams</h2>
+						<PlayerList
+							challengeNoRatings={challengeNoRatings}
+							players={playersNewTeam}
 							season={season}
 							userTid={userTid}
 						/>

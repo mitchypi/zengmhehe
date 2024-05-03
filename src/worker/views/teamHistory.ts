@@ -10,8 +10,16 @@ import { getMostCommonPosition } from "../core/player/checkJerseyNumberRetiremen
 import { bySport } from "../../common";
 import addFirstNameShort from "../util/addFirstNameShort";
 import { groupByUnique } from "../../common/utils";
+import { getPlayoffsByConfBySeason } from "./frivolitiesTeamSeasons";
 
-export const getHistoryTeam = (teamSeasons: TeamSeason[]) => {
+type PlayoffsByConfBySeason = Awaited<
+	ReturnType<typeof getPlayoffsByConfBySeason>
+>;
+
+export const getHistoryTeam = (
+	teamSeasons: TeamSeason[],
+	playoffsByConfBySeason: PlayoffsByConfBySeason,
+) => {
 	let bestRecord;
 	let worstRecord;
 	let bestWinp = -Infinity;
@@ -25,7 +33,7 @@ export const getHistoryTeam = (teamSeasons: TeamSeason[]) => {
 		otl?: number;
 		playoffRoundsWon: number;
 		numPlayoffRounds: number;
-		numConfs: number;
+		playoffsByConf: boolean;
 		name?: string;
 		tid: number;
 		abbrev: string;
@@ -38,6 +46,7 @@ export const getHistoryTeam = (teamSeasons: TeamSeason[]) => {
 	let playoffAppearances = 0;
 	let finalsAppearances = 0;
 	let championships = 0;
+	let lastChampionship = undefined;
 
 	for (const teamSeason of teamSeasons) {
 		const numPlayoffRounds = g.get(
@@ -52,8 +61,8 @@ export const getHistoryTeam = (teamSeasons: TeamSeason[]) => {
 			tied: teamSeason.tied,
 			otl: teamSeason.otl,
 			playoffRoundsWon: teamSeason.playoffRoundsWon,
+			playoffsByConf: playoffsByConfBySeason.get(teamSeason.season),
 			numPlayoffRounds,
-			numConfs: g.get("confs", teamSeason.season).length,
 			name:
 				teamSeason.region && teamSeason.name
 					? `${teamSeason.region} ${teamSeason.name}`
@@ -80,6 +89,7 @@ export const getHistoryTeam = (teamSeasons: TeamSeason[]) => {
 
 		if (teamSeason.playoffRoundsWon === numPlayoffRounds) {
 			championships += 1;
+			lastChampionship = teamSeason.season;
 		}
 
 		const gp = helpers.getTeamSeasonGp(teamSeason);
@@ -129,15 +139,17 @@ export const getHistoryTeam = (teamSeasons: TeamSeason[]) => {
 		championships,
 		bestRecord,
 		worstRecord,
+		lastChampionship,
 	};
 };
 
 export const getHistory = async (
 	teamSeasons: TeamSeason[],
 	playersAll: Player[],
+	playoffsByConfBySeason: PlayoffsByConfBySeason,
 	gmHistory?: boolean,
 ) => {
-	const teamHistory = getHistoryTeam(teamSeasons);
+	const teamHistory = getHistoryTeam(teamSeasons, playoffsByConfBySeason);
 
 	const stats = bySport({
 		baseball: ["gp", "keyStats", "war"],
@@ -296,7 +308,12 @@ const updateTeamHistory = async (
 			}
 		}
 
-		const history = await getHistory(teamSeasons, players);
+		const playoffsByConfBySeason = await getPlayoffsByConfBySeason();
+		const history = await getHistory(
+			teamSeasons,
+			players,
+			playoffsByConfBySeason,
+		);
 
 		const playersByPid = groupByUnique(history.players, "pid");
 		const retiredJerseyNumbers2 = retiredJerseyNumbers.map(row => {

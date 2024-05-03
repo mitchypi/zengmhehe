@@ -3,6 +3,8 @@ import { g, helpers, logEvent } from "../../util";
 import type { Conditions, GameResults } from "../../../common/types";
 import season from "../season";
 import { findSeries } from "./writeGameStats";
+import getWinner from "../../../common/getWinner";
+import formatScoreWithShootout from "../../../common/formatScoreWithShootout";
 
 const updatePlayoffSeries = async (
 	results: GameResults,
@@ -18,11 +20,11 @@ const updatePlayoffSeries = async (
 			? 1
 			: helpers.numGamesToWinSeries(
 					g.get("numGamesPlayoffSeries", "current")[playoffSeries.currentRound],
-			  );
+				);
 
 	for (const result of results) {
-		// Did the home (true) or away (false) team win this game? Here, "home" refers to this game, not the team which has homecourt advnatage in the playoffs, which is what series.home refers to below.
-		const won0 = result.team[0].stat.pts > result.team[1].stat.pts;
+		// Did the home (0) or away (1) team win this game? Here, "home" refers to this game, not the team which has homecourt advantage in the playoffs, which is what series.home refers to below.
+		const winner = getWinner([result.team[0].stat, result.team[1].stat]);
 		const series = findSeries(
 			playoffSeries,
 			result.team[0].id,
@@ -34,16 +36,29 @@ const updatePlayoffSeries = async (
 			if (home.pts === undefined) {
 				home.pts = 0;
 			}
-
 			if (away.pts === undefined) {
 				away.pts = 0;
+			}
+
+			const shootout = result.team[0].stat.sPts !== undefined;
+			if (shootout) {
+				if (home.sPts === undefined) {
+					home.sPts = 0;
+				}
+				if (away.sPts === undefined) {
+					away.sPts = 0;
+				}
 			}
 
 			if (home.tid === result.team[0].id) {
 				home.pts += result.team[0].stat.pts;
 				away.pts += result.team[1].stat.pts;
+				if (shootout) {
+					home.sPts += result.team[0].stat.sPts;
+					away.sPts += result.team[1].stat.sPts;
+				}
 
-				if (won0) {
+				if (winner === 0) {
 					home.won += 1;
 				} else {
 					away.won += 1;
@@ -51,8 +66,12 @@ const updatePlayoffSeries = async (
 			} else if (away.tid === result.team[0].id) {
 				away.pts += result.team[0].stat.pts;
 				home.pts += result.team[1].stat.pts;
+				if (shootout) {
+					away.sPts += result.team[0].stat.sPts;
+					home.sPts += result.team[1].stat.sPts;
+				}
 
-				if (won0) {
+				if (winner === 0) {
 					away.won += 1;
 				} else {
 					home.won += 1;
@@ -73,21 +92,27 @@ const updatePlayoffSeries = async (
 			series.home.won >= numGamesToWinSeries
 		) {
 			let winnerPts;
+			let winnerSPts;
 			let winnerTid;
 			let loserPts;
+			let loserSPts;
 			let loserTid;
 			let loserWon;
 
 			if (series.away.won >= numGamesToWinSeries) {
 				winnerPts = series.away.pts;
+				winnerSPts = series.away.sPts;
 				winnerTid = series.away.tid;
 				loserPts = series.home.pts;
+				loserSPts = series.home.sPts;
 				loserTid = series.home.tid;
 				loserWon = series.home.won;
 			} else {
 				winnerPts = series.home.pts;
+				winnerSPts = series.away.sPts;
 				winnerTid = series.home.tid;
 				loserPts = series.away.pts;
+				loserSPts = series.home.sPts;
 				loserTid = series.away.tid;
 				loserWon = series.away.won;
 			}
@@ -135,7 +160,16 @@ const updatePlayoffSeries = async (
 				loserPts !== undefined &&
 				numGamesToWinSeries === 1;
 			const score = showPts
-				? `${winnerPts}-${loserPts}`
+				? formatScoreWithShootout(
+						{
+							pts: winnerPts!,
+							sPts: winnerSPts,
+						},
+						{
+							pts: loserPts!,
+							sPts: loserSPts,
+						},
+					)
 				: `${numGamesToWinSeries}-${loserWon}`;
 			const showNotification =
 				series.away.tid === g.get("userTid") ||

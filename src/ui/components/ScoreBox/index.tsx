@@ -5,6 +5,7 @@ import React, { memo, type ReactNode } from "react";
 import TeamLogoInline from "../TeamLogoInline";
 import defaultGameAttributes from "../../../common/defaultGameAttributes";
 import PlayerNameLabels from "../PlayerNameLabels";
+import getWinner from "../../../common/getWinner";
 
 const roundHalf = (x: number) => {
 	return Math.round(x * 2) / 2;
@@ -14,6 +15,7 @@ const roundHalf = (x: number) => {
 type Team = {
 	ovr?: number;
 	pts?: number;
+	sPts?: number;
 	tid: number;
 	won?: number;
 	lost?: number;
@@ -93,19 +95,7 @@ const ScoreBox = memo(
 			"userTid",
 		]);
 
-		let winner: -1 | 0 | 1 | undefined;
-		if (game.teams[0].pts !== undefined && game.teams[1].pts !== undefined) {
-			if (game.teams[0].pts > game.teams[1].pts) {
-				winner = 0;
-			} else if (game.teams[1].pts > game.teams[0].pts) {
-				winner = 1;
-			} else if (
-				typeof game.teams[1].pts === "number" &&
-				game.teams[1].pts === game.teams[0].pts
-			) {
-				winner = -1;
-			}
-		}
+		const winner = getWinner(game.teams);
 
 		const final = winner !== undefined;
 
@@ -182,10 +172,10 @@ const ScoreBox = memo(
 						allStarGame
 							? "special"
 							: boxScoreTeamOverride !== undefined
-							? boxScoreTeamOverride
-							: `${teamInfoCache[game.teams[0].tid]?.abbrev}_${
-									game.teams[0].tid
-							  }`,
+								? boxScoreTeamOverride
+								: `${teamInfoCache[game.teams[0].tid]?.abbrev}_${
+										game.teams[0].tid
+									}`,
 						gameSeason,
 						game.gid,
 					]),
@@ -287,7 +277,7 @@ const ScoreBox = memo(
 									? teamInfoCache[t.tid]?.abbrev
 									: `${teamInfoCache[t.tid]?.region} ${
 											teamInfoCache[t.tid]?.name
-									  }`;
+										}`;
 								rosterURL = helpers.leagueUrl([
 									"roster",
 									`${teamInfoCache[t.tid]?.abbrev}_${t.tid}`,
@@ -383,7 +373,7 @@ const ScoreBox = memo(
 											!small
 												? {
 														width: 210,
-												  }
+													}
 												: undefined
 										}
 									>
@@ -462,9 +452,21 @@ const ScoreBox = memo(
 														}}
 													>
 														{t.pts}
+														{t.sPts !== undefined ? (
+															<span className="fw-normal">
+																&nbsp;({t.sPts})
+															</span>
+														) : null}
 													</a>
 												) : (
-													t.pts
+													<>
+														{t.pts}
+														{t.sPts !== undefined ? (
+															<span className="text-body-secondary">
+																&nbsp;({t.sPts})
+															</span>
+														) : null}
+													</>
 												)}
 											</div>
 										) : null}

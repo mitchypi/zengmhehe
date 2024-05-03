@@ -10,6 +10,8 @@ import type {
 	PlayoffSeries,
 } from "../../../common/types";
 import { headToHead, season } from "..";
+import getWinner from "../../../common/getWinner";
+import formatScoreWithShootout from "../../../common/formatScoreWithShootout";
 
 const allStarMVP = async (
 	game: Game,
@@ -100,7 +102,7 @@ export const findSeries = (
 	tid0: number,
 	tid1: number,
 ) => {
-	const isValidSeries = (s: typeof playoffSeries.series[number][number]) => {
+	const isValidSeries = (s: (typeof playoffSeries.series)[number][number]) => {
 		// Here and below, can't assume series and game have same home/away, because for series "home" means home court advantage in series, but for game it means this individual game.
 		if (s.home.tid === tid0 && s.away?.tid === tid1) {
 			return true;
@@ -152,8 +154,9 @@ const getPlayoffInfos = async (game: Game) => {
 	const second =
 		series.home.tid === game.teams[0].tid ? series.away : series.home;
 
-	const firstWon = game.teams[0].pts > game.teams[1].pts ? 1 : 0;
-	const secondWon = game.teams[1].pts > game.teams[0].pts ? 1 : 0;
+	const winner = getWinner(game.teams);
+	const firstWon = winner === 0 ? 1 : 0;
+	const secondWon = winner === 1 ? 1 : 0;
 
 	const playoffInfos = [
 		{
@@ -173,7 +176,7 @@ const getPlayoffInfos = async (game: Game) => {
 			? 1
 			: helpers.numGamesToWinSeries(
 					g.get("numGamesPlayoffSeries", "current")[playoffSeries.currentRound],
-			  );
+				);
 
 	return {
 		currentRound: playoffSeries.currentRound,
@@ -213,6 +216,7 @@ export const gameSimToBoxScore = async (results: GameResults, att: number) => {
 				tied: results.team[0].tied,
 				otl: results.team[0].otl,
 				players: [],
+				pts: 0, // Will be filled in as a team stat later
 			},
 			{
 				tid: results.team[1].id,
@@ -222,6 +226,7 @@ export const gameSimToBoxScore = async (results: GameResults, att: number) => {
 				tied: results.team[1].tied,
 				otl: results.team[1].otl,
 				players: [],
+				pts: 0, // Will be filled in as a team stat later
 			},
 		],
 	};
@@ -290,13 +295,15 @@ export const gameSimToBoxScore = async (results: GameResults, att: number) => {
 
 	// Store some extra junk to make box scores easy
 	const otl = gameStats.overtimes > 0 && g.get("otl", "current");
-	const [tw, tl] =
-		results.team[0].stat.pts > results.team[1].stat.pts ? [0, 1] : [1, 0];
+	const winner = getWinner([results.team[0].stat, results.team[1].stat]);
+	const [tw, tl] = winner === 0 ? [0, 1] : [1, 0];
 	gameStats.won.tid = results.team[tw].id;
 	gameStats.lost.tid = results.team[tl].id;
 	gameStats.won.pts = results.team[tw].stat.pts;
 	gameStats.lost.pts = results.team[tl].stat.pts;
-	const tied = results.team[0].stat.pts === results.team[1].stat.pts;
+	gameStats.won.sPts = results.team[tw].stat.sPts;
+	gameStats.lost.sPts = results.team[tl].stat.sPts;
+	const tied = winner === -1;
 
 	if (g.get("phase") < PHASE.PLAYOFFS) {
 		if (
@@ -407,7 +414,7 @@ const writeGameStats = async (
 			`${g.get("teamInfoCache")[g.get("userTid")]?.abbrev}_${g.get("userTid")}`,
 			g.get("season"),
 			results.gid,
-		])}">${results.team[tw].stat.pts}-${results.team[tl].stat.pts}</a>.`;
+		])}">${formatScoreWithShootout(results.team[tw].stat, results.team[tl].stat)}</a>.`;
 
 		let type: LogEventType =
 			results.team[tw].id === g.get("userTid") ? "gameWon" : "gameLost";
@@ -433,9 +440,7 @@ const writeGameStats = async (
 				"special",
 				g.get("season"),
 				results.gid,
-			])}">${results.team[tw].stat.pts}-${
-				results.team[tl].stat.pts
-			} in the All-Star Game</a>.`;
+			])}">${formatScoreWithShootout(results.team[tw].stat, results.team[tl].stat)} in the All-Star Game</a>.`;
 			const type = tied ? "gameTied" : "gameWon";
 			logEvent(
 				{
@@ -463,8 +468,8 @@ const writeGameStats = async (
 			currentRound >= numPlayoffRounds - 1
 				? "finals"
 				: playoffsByConf
-				? "conference finals"
-				: "semifinals";
+					? "conference finals"
+					: "semifinals";
 		let score = round === "finals" ? 20 : 10;
 		const gameNum = playoffInfos[0].won + playoffInfos[0].lost;
 		const gameNumText = numGamesToWinSeries > 1 ? ` game ${gameNum} of` : "";
@@ -505,9 +510,7 @@ const writeGameStats = async (
 			`${g.get("teamInfoCache")[g.get("userTid")]?.abbrev}_${g.get("userTid")}`,
 			g.get("season"),
 			results.gid,
-		])}">${results.team[tw].stat.pts}-${
-			results.team[tl].stat.pts
-		}</a> in${gameNumText} the ${round}${leadText}.`;
+		])}">${formatScoreWithShootout(results.team[tw].stat, results.team[tl].stat)}</a> in${gameNumText} the ${round}${leadText}.`;
 
 		// Await needed so this happens before the updatePlayoffSeries event
 		await logEvent(
@@ -538,12 +541,14 @@ const writeGameStats = async (
 						{
 							ovr: results.team[0].ovr,
 							pts: results.team[0].stat.pts,
+							sPts: results.team[0].stat.sPts,
 							tid: results.team[0].id,
 							playoffs: gameStats.teams[0].playoffs,
 						},
 						{
 							ovr: results.team[1].ovr,
 							pts: results.team[1].stat.pts,
+							sPts: results.team[1].stat.sPts,
 							tid: results.team[1].id,
 							playoffs: gameStats.teams[1].playoffs,
 						},
@@ -558,8 +563,14 @@ const writeGameStats = async (
 		const indOther = indTeam === 0 ? 1 : 0;
 		const won = indTeam === tw;
 		const score = won
-			? `${results.team[indTeam].stat.pts}-${results.team[indOther].stat.pts}`
-			: `${results.team[indOther].stat.pts}-${results.team[indTeam].stat.pts}`;
+			? formatScoreWithShootout(
+					results.team[indTeam].stat,
+					results.team[indOther].stat,
+				)
+			: formatScoreWithShootout(
+					results.team[indOther].stat,
+					results.team[indTeam].stat,
+				);
 
 		let endPart = "";
 		if (allStarGame) {
@@ -574,12 +585,12 @@ const writeGameStats = async (
 					currentRound === -1
 						? "play-in tournament game"
 						: currentRound >= numPlayoffRounds - 1
-						? "finals"
-						: currentRound >= numPlayoffRounds - 2
-						? playoffsByConf
-							? "conference finals"
-							: "semifinals"
-						: `${helpers.ordinal(currentRound + 1)} round of the playoffs`;
+							? "finals"
+							: currentRound >= numPlayoffRounds - 2
+								? playoffsByConf
+									? "conference finals"
+									: "semifinals"
+								: `${helpers.ordinal(currentRound + 1)} round of the playoffs`;
 
 				const gameNum = playoffInfos[0].won + playoffInfos[0].lost;
 				const numGamesThisRound =
@@ -619,7 +630,7 @@ const writeGameStats = async (
 				? "special"
 				: `${g.get("teamInfoCache")[results.team[indTeam].id]?.abbrev}_${
 						results.team[indTeam].id
-				  }`,
+					}`,
 			g.get("season"),
 			results.gid,
 		])}">${score}</a> ${endPart}.`;
@@ -654,6 +665,9 @@ const writeGameStats = async (
 		if (allStars) {
 			allStars.gid = results.gid;
 			allStars.score = [results.team[0].stat.pts, results.team[1].stat.pts];
+			if (results.team[0].stat.sPts !== undefined) {
+				allStars.sPts = [results.team[0].stat.sPts, results.team[0].stat.sPts];
+			}
 			allStars.overtimes = results.overtimes;
 			await idb.cache.allStars.put(allStars);
 		}
@@ -666,6 +680,10 @@ const writeGameStats = async (
 	await headToHead.addGame({
 		tids: [gameStats.won.tid, gameStats.lost.tid],
 		pts: [gameStats.won.pts, gameStats.lost.pts],
+		sPts:
+			gameStats.won.sPts === undefined
+				? undefined
+				: [gameStats.won.sPts, gameStats.lost.sPts!],
 		overtime: gameStats.overtimes > 0,
 		playoffRound: currentRound,
 		seriesWinner,

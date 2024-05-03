@@ -79,9 +79,11 @@ export const setTeamInfo = async (
 				(Object.hasOwn(g, "teamInfoCache")
 					? g.get("teamInfoCache")[t.tid]?.imgURL
 					: "");
+
+			// Extra teamSeasonOverride check here because this could intentionally be undefined in the provided teamSeason
 			t.imgURLSmall =
 				teamSeason.imgURLSmall ??
-				(Object.hasOwn(g, "teamInfoCache")
+				(Object.hasOwn(g, "teamInfoCache") && !teamSeasonOverride
 					? g.get("teamInfoCache")[t.tid]?.imgURLSmall
 					: undefined);
 			t.colors = teamSeason.colors;
@@ -177,7 +179,7 @@ const boxScore = async (gid: number) => {
 	const lostInd = wonInd === 0 ? 1 : 0;
 
 	const overtimeText = helpers.overtimeText(game.overtimes, game.numPeriods);
-	const overtime = overtimeText === "" ? "" : ` (${overtimeText})`;
+	const overtime = overtimeText === "" ? "" : `(${overtimeText})`;
 
 	if (game.numPeriods === undefined) {
 		game.numPeriods = 4;
@@ -259,7 +261,7 @@ const updateBoxScore = async (
 	}
 };
 
-const loadAbbrevs = async (season: number) => {
+export const loadAbbrevs = async (season: number) => {
 	const abbrevs: Record<number, string> = {};
 	abbrevs[-2] = "ASG";
 	abbrevs[-1] = "ASG";

@@ -40,6 +40,7 @@ import type {
 	SeasonLeaders,
 	GameAttributeWithHistory,
 	GameAttributesLeagueWithHistory,
+	SavedTrade,
 } from "../../common/types";
 import getInitialNumGamesConfDivSettings from "../core/season/getInitialNumGamesConfDivSettings";
 import { amountToLevel } from "../../common/budgetLevels";
@@ -123,6 +124,10 @@ export interface LeagueDB extends DBSchema {
 		key: number;
 		value: ReleasedPlayer;
 		autoIncrementKeyPath: "rid";
+	};
+	savedTrades: {
+		key: string;
+		value: SavedTrade;
 	};
 	schedule: {
 		key: number;
@@ -533,6 +538,10 @@ const create = (db: IDBPDatabase<LeagueDB>) => {
 	});
 	scheduledEventsStore.createIndex("season", "season", {
 		unique: false,
+	});
+
+	db.createObjectStore("savedTrades", {
+		keyPath: "hash",
 	});
 };
 
@@ -1404,6 +1413,33 @@ const migrate = async ({
 		}
 
 		await store.delete("ties");
+	}
+
+	if (oldVersion <= 58) {
+		db.createObjectStore("savedTrades", {
+			keyPath: "hash",
+		});
+	}
+
+	if (oldVersion <= 59) {
+		await iterate(
+			transaction.objectStore("playerFeats"),
+			undefined,
+			undefined,
+			feat => {
+				const pts = feat.score.split("-").map(x => parseInt(x));
+				let diff = -Infinity;
+				if (!Number.isNaN(pts[0]) && !Number.isNaN(pts[1])) {
+					diff = pts[0] - pts[1];
+				}
+
+				feat.result = diff === 0 ? "T" : (feat as any).won ? "W" : "L";
+
+				delete (feat as any).won;
+
+				return feat;
+			},
+		);
 	}
 };
 

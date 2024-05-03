@@ -10,6 +10,8 @@ import type {
 	GamePlayer,
 	GameResults,
 } from "../../../common/types";
+import getWinner from "../../../common/getWinner";
+import formatScoreWithShootout from "../../../common/formatScoreWithShootout";
 
 const checkPlayer = bySport({
 	baseball: checkStatisticalFeatBaseball,
@@ -25,6 +27,12 @@ const checkStatisticalFeat = (
 	results: GameResults,
 	conditions: Conditions,
 ) => {
+	const minFactor = helpers.quarterLengthFactor();
+	if (minFactor <= 0.01) {
+		// Skip for very short games
+		return;
+	}
+
 	const logFeat = async (text: string, score: number) => {
 		let allStars;
 
@@ -60,10 +68,12 @@ const checkStatisticalFeat = (
 	const { score, feats } = checkPlayer(p);
 	const allStarGame = results.team[0].id === -1 && results.team[1].id === -2;
 
+	const winner = getWinner([results.team[0].stat, results.team[1].stat]);
 	if (feats) {
-		const [i, j] = results.team[0].id === tid ? [0, 1] : [1, 0];
-		const won = results.team[i].stat.pts > results.team[j].stat.pts;
-		const tied = results.team[i].stat.pts === results.team[j].stat.pts;
+		const [i, j] =
+			results.team[0].id === tid ? ([0, 1] as const) : ([1, 0] as const);
+		const won = winner === i;
+		const tied = winner === -1;
 		const featTextArr = Object.keys(feats).map(stat => {
 			const text = `${feats[stat]} ${stat}`;
 
@@ -101,16 +111,23 @@ const checkStatisticalFeat = (
 			}
 		}
 
+		const scoreText = formatScoreWithShootout(
+			results.team[i].stat,
+			results.team[j].stat,
+		);
+
 		const endPart = allStarGame
 			? `${tied ? "tie" : won ? "win" : "loss"} in the All-Star Game`
 			: `${tied ? "tie with the" : won ? "win over the" : "loss to the"} ${
 					g.get("teamInfoCache")[results.team[j].id]?.name
-			  }`;
+				}`;
 		featText += `</a> in ${
 			results.team[i].stat.pts.toString().charAt(0) === "8" ? "an" : "a"
-		} ${results.team[i].stat.pts}-${results.team[j].stat.pts} ${endPart}.`;
+		} ${scoreText} ${endPart}.`;
 
 		logFeat(featText, score);
+
+		const result = tied ? "T" : won ? "W" : "L";
 
 		idb.cache.playerFeats.add({
 			pid,
@@ -122,10 +139,10 @@ const checkStatisticalFeat = (
 			playoffs: g.get("phase") === PHASE.PLAYOFFS,
 			gid: results.gid,
 			stats: p.stat,
-			won,
-			score: `${results.team[i].stat.pts}-${results.team[j].stat.pts}`,
+			score: scoreText,
 			overtimes: results.overtimes,
 			numPeriods: g.get("numPeriods"),
+			result,
 		});
 	}
 };

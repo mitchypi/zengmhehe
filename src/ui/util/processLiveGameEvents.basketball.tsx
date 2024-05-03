@@ -254,6 +254,26 @@ export const getText = (
 		}
 	} else if (event.type === "outOfBounds") {
 		texts = [`Out of bounds, last touched by the ${event.on}`];
+	} else if (event.type === "shootoutStart") {
+		texts = [
+			`The game will now be decided by a three-point shootout with ${event.rounds} rounds!`,
+		];
+	} else if (event.type === "shootoutTeam") {
+		texts = [`${getName(event.pid)} steps up to the line`];
+	} else if (event.type === "shootoutShot") {
+		const he = getPronoun("He");
+		texts = event.made
+			? ["It's good!", "Swish!", "It rattles around but goes in!"]
+			: [
+					"It rims out!",
+					`${he} bricks it!`,
+					`${he} misses everything, airball!`,
+				];
+		weights = event.made ? [1, 0.25, 0.25] : [1, 0.1, 0.01];
+	} else if (event.type === "shootoutTie") {
+		texts = [
+			"The shootout is tied! Players will alternate shots until there is a winner",
+		];
 	}
 
 	if (texts) {
@@ -314,7 +334,11 @@ const processLiveGameEvents = ({
 	overtimes: number;
 	quarters: string[];
 }) => {
-	if (!playersByPid || boxScore.gid !== playersByPidGid) {
+	if (
+		!playersByPid ||
+		boxScore.gid !== playersByPidGid ||
+		events[0]?.type === "init"
+	) {
 		playersByPidGid = boxScore.gid;
 		playersByPid = {};
 		for (const t of boxScore.teams) {
@@ -351,9 +375,9 @@ const processLiveGameEvents = ({
 			if (quarter > boxScore.numPeriods) {
 				overtimes = quarter - boxScore.numPeriods;
 				if (overtimes === 1) {
-					boxScore.overtime = " (OT)";
+					boxScore.overtime = "(OT)";
 				} else if (overtimes > 1) {
-					boxScore.overtime = ` (${overtimes}OT)`;
+					boxScore.overtime = `(${overtimes}OT)`;
 				}
 				boxScore.quarter = `${helpers.ordinal(overtimes)} overtime`;
 				boxScore.quarterShort = overtimes === 1 ? "OT" : `${overtimes}OT`;
@@ -367,6 +391,12 @@ const processLiveGameEvents = ({
 				)}${quarter}`;
 				quarters.push(boxScore.quarterShort);
 			}
+		} else if (e.type === "shootoutStart") {
+			boxScore.shootout = true;
+			boxScore.teams[0].sPts = 0;
+			boxScore.teams[0].sAtt = 0;
+			boxScore.teams[1].sPts = 0;
+			boxScore.teams[1].sAtt = 0;
 		}
 
 		if (e.type === "stat") {
@@ -413,7 +443,14 @@ const processLiveGameEvents = ({
 			} else if (e.s === "gs") {
 				const p = playersByPid[e.pid!];
 				p.inGame = true;
+			} else if (e.s === "sPts" || e.s === "sAtt") {
+				// Shootout
+				boxScore.teams[actualT!][e.s] += e.amt;
 			}
+		} else if (e.type === "timeouts") {
+			// Reversed for actualT
+			boxScore.teams[0].timeouts = e.timeouts[1];
+			boxScore.teams[1].timeouts = e.timeouts[0];
 		} else if (e.type !== "init") {
 			text = getText(e, boxScore);
 			t = actualT;
@@ -421,7 +458,10 @@ const processLiveGameEvents = ({
 				e.type === "gameOver" ||
 				e.type === "period" ||
 				e.type === "overtime" ||
-				e.type === "elamActive";
+				e.type === "elamActive" ||
+				e.type === "shootoutStart" ||
+				e.type === "shootoutTie" ||
+				e.type === "shootoutTeam";
 
 			let time;
 			if (eAny.clock !== undefined) {
@@ -466,8 +506,8 @@ const processLiveGameEvents = ({
 				boxScore.possession = newPossessionTypes[eAny.type]
 					? actualT
 					: actualT === 0
-					  ? 1
-					  : 0;
+						? 1
+						: 0;
 			}
 
 			stop = true;

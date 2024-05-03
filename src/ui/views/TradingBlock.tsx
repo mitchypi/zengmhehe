@@ -2,7 +2,13 @@ import { useState, type ReactNode } from "react";
 import { PHASE } from "../../common";
 import useTitleBar from "../hooks/useTitleBar";
 import { getCols, helpers, toWorker, useLocalPartial } from "../util";
-import { ActionButton, DataTable, HelpPopover, SafeHtml } from "../components";
+import {
+	ActionButton,
+	DataTable,
+	HelpPopover,
+	SafeHtml,
+	SaveTrade,
+} from "../components";
 import type { Col } from "../components/DataTable";
 import type { View } from "../../common/types";
 import type api from "../../worker/api";
@@ -13,22 +19,26 @@ import {
 } from "../components/contract";
 import { wrappedPlayerNameLabels } from "../components/PlayerNameLabels";
 import { OvrChange } from "./Trade/Summary";
+import type { MissingAsset } from "../../worker/views/savedTrades";
 
 export type OfferType = Awaited<
 	ReturnType<(typeof api)["main"]["getTradingBlockOffers"]>
->[0];
+>[0] & {
+	missing?: MissingAsset[];
+	missingUser?: MissingAsset[];
+};
 
 type OfferProps = {
 	children: ReactNode;
 	hideTopTeamOvrs?: boolean;
 	onNegotiate: () => void;
-	onRemove: () => void;
+	onRemove?: () => void;
 	teamInfo: {
 		abbrev: string;
 		name: string;
 		region: string;
 	};
-} & Omit<OfferType, "pids" | "dpids" | "picks" | "players"> &
+} & OfferType &
 	Pick<
 		View<"tradingBlock">,
 		"challengeNoRatings" | "salaryCap" | "salaryCapType"
@@ -108,10 +118,14 @@ export const Offer = (props: OfferProps) => {
 	const {
 		challengeNoRatings,
 		children,
+		dpids,
+		dpidsUser,
 		hideTopTeamOvrs,
 		onNegotiate,
 		onRemove,
 		payroll,
+		pids,
+		pidsUser,
 		salaryCap,
 		salaryCapType,
 		strategy,
@@ -125,6 +139,8 @@ export const Offer = (props: OfferProps) => {
 	const salaryCapOrPayrollText =
 		salaryCapType === "none" ? "payroll" : "cap space";
 
+	const { userTid } = useLocalPartial(["userTid"]);
+
 	if (!teamInfo) {
 		return null;
 	}
@@ -137,12 +153,29 @@ export const Offer = (props: OfferProps) => {
 						{teamInfo.region} {teamInfo.name}
 					</a>
 				</h2>
-				<button
-					type="button"
-					className="btn-close ms-1"
-					title="Remove offer from list"
-					onClick={onRemove}
+				<SaveTrade
+					className="ms-4"
+					tradeTeams={[
+						{
+							pids: pidsUser,
+							dpids: dpidsUser,
+							tid: userTid,
+						},
+						{
+							pids: pids,
+							dpids: dpids,
+							tid,
+						},
+					]}
 				/>
+				{onRemove ? (
+					<button
+						type="button"
+						className="btn-close ms-4"
+						title="Remove trade from list"
+						onClick={onRemove}
+					/>
+				) : null}
 			</div>
 			<div
 				className="mb-3 d-sm-flex justify-content-between"
@@ -248,16 +281,20 @@ export const OfferTable = ({
 		dpids: number[];
 		dpidsUser: number[];
 	}) => void;
-	handleRemove: (i: number) => void;
+	handleRemove?: (i: number) => void;
 	offers: OfferType[];
 } & Pick<
 	View<"tradingBlock">,
 	"challengeNoRatings" | "salaryCap" | "salaryCapType"
 >) => {
-	const { teamInfoCache } = useLocalPartial(["teamInfoCache"]);
+	const { teamInfoCache, userTid } = useLocalPartial([
+		"teamInfoCache",
+		"userTid",
+	]);
 
 	const offerCols = getCols(
 		[
+			"",
 			"Team",
 			"Record",
 			"Strategy",
@@ -268,17 +305,20 @@ export const OfferTable = ({
 			"Actions",
 		],
 		{
+			"": {
+				width: "1px",
+			},
 			Actions: {
 				sortSequence: [],
 				width: "1px",
 			},
 		},
 	);
-	offerCols[3].title = "Your Ovr";
-	offerCols[3].desc = "Your team's change in ovr rating";
-	offerCols[4].title = "Other Ovr";
-	offerCols[4].desc = "Other team's change in ovr rating";
-	offerCols.splice(5, 0, ...assetCols);
+	offerCols[4].title = "Your Ovr";
+	offerCols[4].desc = "Your team's change in ovr rating";
+	offerCols[5].title = "Other Ovr";
+	offerCols[5].desc = "Other team's change in ovr rating";
+	offerCols.splice(6, 0, ...assetCols);
 
 	const offerRows = offers.map((offer, i) => {
 		const salaryCapOrPayroll =
@@ -287,14 +327,28 @@ export const OfferTable = ({
 		const t = teamInfoCache[offer.tid];
 		if (!t) {
 			return {
-				key: offer.tid,
+				key: i,
 				data: [],
 			};
 		}
 
 		return {
-			key: offer.tid,
+			key: i,
 			data: [
+				<SaveTrade
+					tradeTeams={[
+						{
+							pids: offer.pidsUser,
+							dpids: offer.dpidsUser,
+							tid: userTid,
+						},
+						{
+							pids: offer.pids,
+							dpids: offer.dpids,
+							tid: offer.tid,
+						},
+					]}
+				/>,
 				<a href={helpers.leagueUrl(["roster", `${t.abbrev}_${offer.tid}`])}>
 					{t.abbrev}
 				</a>,
@@ -310,7 +364,7 @@ export const OfferTable = ({
 							),
 							sortValue: offer.summary.teams[1].ovrAfter,
 							searchValue: `${offer.summary.teams[1].ovrBefore} ${offer.summary.teams[1].ovrAfter}`,
-					  }
+						}
 					: null,
 				!challengeNoRatings
 					? {
@@ -322,7 +376,7 @@ export const OfferTable = ({
 							),
 							sortValue: offer.summary.teams[0].ovrAfter,
 							searchValue: `${offer.summary.teams[0].ovrBefore} ${offer.summary.teams[0].ovrAfter}`,
-					  }
+						}
 					: null,
 				...getAssetColContents(offer),
 				helpers.formatCurrency(salaryCapOrPayroll / 1000, "M"),
@@ -352,14 +406,16 @@ export const OfferTable = ({
 					>
 						Negotiate
 					</button>
-					<button
-						type="button"
-						className="btn-close ms-2 p-0"
-						title="Remove offer from list"
-						onClick={() => {
-							handleRemove(i);
-						}}
-					/>
+					{handleRemove ? (
+						<button
+							type="button"
+							className="btn-close ms-2 p-0"
+							title="Remove trade from list"
+							onClick={() => {
+								handleRemove(i);
+							}}
+						/>
+					) : null}
 				</div>,
 			],
 		};
@@ -374,7 +430,7 @@ export const OfferTable = ({
 			className="align-top-all"
 			clickable={false}
 			cols={offerCols}
-			defaultSort={[0, "asc"]}
+			defaultSort={[1, "asc"]}
 			name={`TradingBlock:Offers`}
 			rows={offerRows}
 			small={false}

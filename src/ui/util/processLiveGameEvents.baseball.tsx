@@ -9,6 +9,7 @@ import {
 	POS_NUMBERS_INVERSE,
 } from "../../common/constants.baseball";
 import type { PlayerInjury } from "../../common/types";
+import { formatScoringSummaryEvent } from "../../common/formatScoringSummaryEvent.baseball";
 
 export type BoxScorePlayer = {
 	name: string;
@@ -19,6 +20,8 @@ type BoxScoreTeam = {
 	abbrev: string;
 	players: BoxScorePlayer[];
 	ptsQtrs: number[];
+	sAtt?: number;
+	sPts?: number;
 };
 
 let playersByPidGid: number | undefined;
@@ -83,33 +86,47 @@ const formatRunners = (
 	runners: Extract<PlayByPlayEvent, { type: "walk" }>["runners"],
 	{
 		ignoreStationary,
+		sideRetired,
 	}: {
 		ignoreStationary?: boolean;
+
+		// When true, only report runners who are out, since the side is retired the other ones don't matter
+		sideRetired?: boolean;
 	} = {},
 ) => {
 	const filtered = runners.filter(
 		runner => runner.to !== runner.from || !ignoreStationary,
 	);
 
-	const texts = [];
+	// Show most important runner (furthest along the bases) first
+	filtered.reverse();
+
+	let texts = [];
 	const scored = [];
+	let numStationary = 0;
 	for (const runner of filtered) {
 		const name = getName(runner.pid);
 		if (runner.out) {
 			texts.push(`${name} out at ${getBaseName(runner.to)}.`);
-		} else if (runner.from === runner.to) {
-			if (!ignoreStationary) {
-				texts.push(`${name} stays at ${getBaseName(runner.to)}.`);
+		} else if (!sideRetired) {
+			if (runner.from === runner.to) {
+				if (!ignoreStationary) {
+					numStationary += 1;
+					texts.push(`${name} stays at ${getBaseName(runner.to)}.`);
+				}
+			} else if (runner.to === 4) {
+				scored.push(name);
+			} else {
+				texts.push(`${name} advances to ${getBaseName(runner.to)}.`);
 			}
-		} else if (runner.to === 4) {
-			scored.push(name);
-		} else {
-			texts.push(`${name} advances to ${getBaseName(runner.to)}.`);
 		}
 	}
 
-	if (scored.length === 1) {
-		texts.push(`${scored[0]} scores.`);
+	if (numStationary > 1 && numStationary === filtered.length) {
+		// This means all the runners stayed
+		texts = ["The runners hold."];
+	} else if (scored.length === 1) {
+		texts.unshift(`${scored[0]} scores.`);
 	} else if (scored.length > 1) {
 		let namesCombined;
 		if (Intl.ListFormat) {
@@ -117,7 +134,7 @@ const formatRunners = (
 		} else {
 			namesCombined = `${scored.length} runners`;
 		}
-		texts.push(`${namesCombined} score.`);
+		texts.unshift(`${namesCombined} score.`);
 	}
 
 	return texts.join(" ");
@@ -265,6 +282,8 @@ export const getText = (
 			break;
 		}
 		case "hitResult": {
+			const sideRetired = event.outs === NUM_OUTS_PER_INNING;
+
 			text = "";
 			if (event.result === "error") {
 				text = `${helpers.pronoun(
@@ -300,13 +319,14 @@ export const getText = (
 					} and thrown out at 1st`;
 				}
 			} else if (event.result === "fieldersChoice") {
-				if (event.outs === NUM_OUTS_PER_INNING) {
+				if (sideRetired) {
 					text = "Fielder's choice,";
+				} else {
+					text = `${helpers.pronoun(
+						local.getState().gender,
+						"He",
+					)} reaches ${getBaseName(event.numBases)} on a fielder's choice`;
 				}
-				text = `${helpers.pronoun(
-					local.getState().gender,
-					"He",
-				)} reaches ${getBaseName(event.numBases)} on a fielder's choice`;
 			} else if (event.result === "doublePlay") {
 				text = "Double play!";
 			}
@@ -329,7 +349,9 @@ export const getText = (
 				// If there are 3 outs and no runner is out, then the hitter was out, in which case we don't need any runnersText
 				runnersText = "";
 			} else {
-				runnersText = formatRunners(getName, event.runners);
+				runnersText = formatRunners(getName, event.runners, {
+					sideRetired,
+				});
 			}
 
 			if (runnersText) {
@@ -393,6 +415,40 @@ export const getText = (
 			bold = true;
 			break;
 		}
+		case "shootoutStart": {
+			text = `The game will now be decided by a home run derby with ${event.rounds} rounds!`;
+			bold = true;
+			break;
+		}
+		case "shootoutTeam": {
+			text = `${getName(event.pid)} steps up to the plate.`;
+			bold = true;
+			break;
+		}
+		case "shootoutShot": {
+			const he = helpers.pronoun(local.getState().gender, "He");
+			text = `Try ${event.att}: ${
+				(event.made
+					? [
+							`${he} hits a deep fly ball.. and it's gone!`,
+							`${he} rockets one down the line... and it's fair!`,
+							"He blasts one way over the fence!",
+							"Home run!",
+						]
+					: [
+							`${he} hits a deep fly ball.. and it falls short.`,
+							`${he} rockets one down the line... and it's foul.`,
+							"A swing and a miss",
+							"He makes contact, but it falls short",
+						])[event.flavor]
+			}`;
+			break;
+		}
+		case "shootoutTie": {
+			text =
+				"The home run derby is tied! Players will alternate swings until there is a winner";
+			break;
+		}
 		default: {
 			text = JSON.stringify(event);
 			console.log(event);
@@ -445,6 +501,7 @@ const processLiveGameEvents = ({
 		numPeriods: number;
 		overtime?: string;
 		possession: 0 | 1 | undefined;
+		shootout?: boolean;
 		teams: [BoxScoreTeam, BoxScoreTeam];
 		time: string;
 		scoringSummary: PlayByPlayEventScore[];
@@ -453,7 +510,11 @@ const processLiveGameEvents = ({
 	quarters: number[];
 	sportState: SportState;
 }) => {
-	if (!playersByPid || boxScore.gid !== playersByPidGid) {
+	if (
+		!playersByPid ||
+		boxScore.gid !== playersByPidGid ||
+		events[0]?.type === "init"
+	) {
 		playersByPidGid = boxScore.gid;
 		playersByPid = {};
 		for (const t of boxScore.teams) {
@@ -486,7 +547,7 @@ const processLiveGameEvents = ({
 				const inning = boxScore.teams[0].ptsQtrs.length;
 				if (inning > boxScore.numPeriods) {
 					overtimes += 1;
-					boxScore.overtime = ` (${boxScore.numPeriods + overtimes})`;
+					boxScore.overtime = `(${boxScore.numPeriods + overtimes})`;
 				}
 				const ordinal = helpers.ordinal(inning);
 				boxScore.quarter = `${ordinal} ${getPeriodName(boxScore.numPeriods)}`;
@@ -536,6 +597,20 @@ const processLiveGameEvents = ({
 			e.type === "hitByPitch"
 		) {
 			sportState.bases = e.bases;
+		} else if (e.type === "shootoutStart") {
+			boxScore.shootout = true;
+			boxScore.teams[0].sPts = 0;
+			boxScore.teams[0].sAtt = 0;
+			boxScore.teams[1].sPts = 0;
+			boxScore.teams[1].sAtt = 0;
+
+			sportState = {
+				...DEFAULT_SPORT_STATE,
+			};
+		} else if (e.type === "shootoutTeam" || e.type === "shootoutShot") {
+			sportState.batterPid = e.pid;
+			sportState.pitcherPid = e.pitcherPid;
+			sportState.o = actualT!;
 		}
 
 		if (e.type === "stat") {
@@ -566,6 +641,23 @@ const processLiveGameEvents = ({
 					type: "Injured",
 					gamesRemaining: -1,
 				};
+
+				// Replace in sportState
+				if (e.replacementPid !== undefined) {
+					if (sportState.pitcherPid === e.pid) {
+						sportState.pitcherPid = e.replacementPid;
+					}
+
+					// Purposely don't update batterPid, because injury only happens after an at bat, so they'll be replaced in bases
+
+					sportState.bases = sportState.bases.map(base => {
+						if (base === e.pid) {
+							return e.replacementPid;
+						}
+
+						return base;
+					}) as SportState["bases"];
+				}
 			}
 
 			const output = getText(e, getName);
@@ -576,6 +668,18 @@ const processLiveGameEvents = ({
 				e.type === "gameOver";
 
 			stop = true;
+
+			const inning = Math.ceil(quarters.length / 2);
+			const scoringSummaryEvent = formatScoringSummaryEvent(e, inning);
+			if (scoringSummaryEvent) {
+				// Swap rather than using actualT in case it's a score for the other team
+				(scoringSummaryEvent as any).t =
+					(scoringSummaryEvent as any).t === 0 ? 1 : 0;
+				boxScore.scoringSummary = [
+					...boxScore.scoringSummary,
+					scoringSummaryEvent,
+				];
+			}
 		}
 	}
 

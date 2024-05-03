@@ -93,13 +93,13 @@ const Roster = ({
 	maxRosterSize,
 	minPayroll,
 	minPayrollAmount,
-	numConfs,
 	numPlayersOnCourt,
 	numPlayoffRounds,
 	payroll,
 	phase,
 	players,
 	playoffs,
+	playoffsByConf,
 	salaryCap,
 	salaryCapType,
 	season,
@@ -171,10 +171,10 @@ const Roster = ({
 				luxuryTaxAmount={luxuryTaxAmount}
 				minPayroll={minPayroll}
 				minPayrollAmount={minPayrollAmount}
-				numConfs={numConfs}
 				numPlayoffRounds={numPlayoffRounds}
 				openRosterSpots={maxRosterSize - players.length}
 				players={players}
+				playoffsByConf={playoffsByConf}
 				season={season}
 				payroll={payroll}
 				profit={profit}
@@ -197,16 +197,18 @@ const Roster = ({
 			<SortableTable
 				disabled={!editable}
 				values={playersSorted}
+				getId={p => String(p.pid)}
 				highlightHandle={({ index }) => index < numPlayersOnCourt}
-				rowClassName={({ index, value: p }) =>
+				rowClassName={({ index, isDragged, value: p }) =>
 					classNames({
 						separator:
-							(isSport("basketball") &&
+							!isDragged &&
+							((isSport("basketball") &&
 								index === numPlayersOnCourt - 1 &&
 								season === currentSeason) ||
-							(!isSport("basketball") &&
-								playersSorted[index + 1] &&
-								p.ratings.pos !== playersSorted[index + 1].ratings.pos),
+								(!isSport("basketball") &&
+									playersSorted[index + 1] &&
+									p.ratings.pos !== playersSorted[index + 1].ratings.pos)),
 						"table-danger": p.hof,
 						"table-info": p.tid === tid && season !== currentSeason,
 					})

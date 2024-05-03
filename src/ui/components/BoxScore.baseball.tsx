@@ -35,6 +35,7 @@ type Team = {
 	region: string;
 	players: any[];
 	pts: number;
+	sPts?: number;
 	season?: number;
 	tid: number;
 };
@@ -206,10 +207,17 @@ const StatsTable = ({
 const processEvents = (events: PlayByPlayEventScore[]) => {
 	const processedEvents: (PlayByPlayEventScore & {
 		score: [number, number];
+		noPoints: boolean;
 	})[] = [];
-	const score = [0, 0] as [number, number];
+	let score = [0, 0] as [number, number];
+	let shootout = false;
 
 	for (const event of events) {
+		if (!shootout && event.type === "shootoutShot") {
+			shootout = true;
+			score = [0, 0];
+		}
+
 		let numRuns = 0;
 		if (event.type === "hitResult" && event.numBases === 4) {
 			// Home run
@@ -225,11 +233,16 @@ const processEvents = (events: PlayByPlayEventScore[]) => {
 			}
 		}
 
+		if (event.type === "shootoutShot" && event.made) {
+			numRuns += 1;
+		}
+
 		score[event.t] += numRuns;
 
 		processedEvents.push({
 			...event,
 			score: helpers.deepCopy(score),
+			noPoints: numRuns === 0,
 		});
 	}
 
@@ -243,18 +256,14 @@ const ScoringSummary = ({
 	processedEvents: ReturnType<typeof processEvents>;
 	teams: [Team, Team];
 }) => {
-	let prevInning: number;
+	let prevInning: number | "Shootout";
 	let prevT: number;
 
 	const [playersByPid, setPlayersByPid] = useState<
 		Record<number, BoxScorePlayer>
 	>({});
 
-	const eventsToShow = processedEvents.filter(event => {
-		return event.score[0] <= teams[0].pts && event.score[1] <= teams[1].pts;
-	});
-
-	const someEvents = eventsToShow.length > 0;
+	const someEvents = processedEvents.length > 0;
 
 	useEffect(() => {
 		if (!someEvents) {
@@ -279,16 +288,27 @@ const ScoringSummary = ({
 	return (
 		<table className="table table-sm border-bottom">
 			<tbody>
-				{eventsToShow.map((event, i) => {
+				{processedEvents.map((event, i) => {
 					let quarterHeader: ReactNode = null;
-					if (event.inning !== prevInning || event.t !== prevT) {
+					const currentPeriod =
+						event.type === "shootoutShot" ? "Shootout" : event.inning;
+					if (
+						event.inning !== prevInning ||
+						(event.t !== prevT && currentPeriod !== "Shootout")
+					) {
 						prevInning = event.inning;
 						prevT = event.t;
 						quarterHeader = (
 							<tr>
 								<td className="text-body-secondary" colSpan={4}>
-									{event.t === 0 ? "Top" : "Bottom"}{" "}
-									{helpers.ordinal(event.inning)}
+									{currentPeriod === "Shootout" ? (
+										"Home run derby"
+									) : (
+										<>
+											{event.t === 0 ? "Top" : "Bottom"}{" "}
+											{helpers.ordinal(event.inning)}
+										</>
+									)}
 								</td>
 							</tr>
 						);
@@ -300,21 +320,24 @@ const ScoringSummary = ({
 							<tr>
 								<td>{teams[event.t].abbrev}</td>
 								<td>
-									{event.t === 0 ? (
-										<>
-											<b>{event.score[0]}</b>-
-											<span className="text-body-secondary">
-												{event.score[1]}
-											</span>
-										</>
-									) : (
-										<>
-											<span className="text-body-secondary">
-												{event.score[0]}
-											</span>
-											-<b>{event.score[1]}</b>
-										</>
-									)}
+									{event.score.map((pts, i) => {
+										return (
+											<Fragment key={i}>
+												<span
+													className={
+														!event.noPoints && event.t === i
+															? "fw-bold"
+															: event.noPoints && event.t === i
+																? "text-danger"
+																: "text-body-secondary"
+													}
+												>
+													{pts}
+												</span>
+												{i === 0 ? "-" : null}
+											</Fragment>
+										);
+									})}
 								</td>
 								<td>{getName(event.pid)}</td>
 								<td style={{ whiteSpace: "normal" }}>

@@ -44,7 +44,6 @@ type Setting = {
 
 	// showOnlyIf is for hiding form elements that only make sense in some situations (like when creating a new league). hidden is for a setting where we're merging it with some other setting in the UI (probably with customForm) but still want to track it here so it gets updated properly.
 	showOnlyIf?: (params: {
-		defaultNewLeagueSettings?: boolean;
 		hasPlayers?: boolean;
 		newLeague?: boolean;
 		realPlayers?: boolean;
@@ -80,87 +79,79 @@ export const settings: Setting[] = (
 				{ key: "all", value: "All seasons, teams, and players" },
 			],
 		},
-		{
-			category: "New League",
-			key: "randomization",
-			name: "Randomization",
-			showOnlyIf: ({ newLeague, hasPlayers, realPlayers }) =>
-				newLeague && hasPlayers && realPlayers,
-			type: "string",
-			values: [
-				{ key: "none", value: "None" },
-				{ key: "debuts", value: "Random debuts" },
-				{
-					key: "debutsKeepCurrent",
-					value: "Random debuts (keep current rosters)",
-				},
-				{ key: "debutsForever", value: "Random debuts forever" },
-				{
-					key: "debutsForeverKeepCurrent",
-					value: "Random debuts forever (keep current rosters)",
-				},
-				{ key: "shuffle", value: "Shuffle rosters" },
-			],
-			descriptionLong: (
-				<>
-					<p>
-						<b>Random debuts:</b> Every player's draft year is randomized.
-						Starting teams and future draft classes are all random combinations
-						of past, current, and future real players.
-					</p>
-					<p>
-						<b>Random debuts forever:</b> Like random debuts, except when it
-						runs out of draft prospects, it will randomize all real players
-						again and add them to future draft classes.
-					</p>
-					<p>
-						<b>(keep current rosters)</b> means that the current rosters will
-						not be randomized, only future draft classes.
-					</p>
-					<p>
-						<b>Shuffle rosters:</b> All active players are placed on random
-						teams.
-					</p>
-				</>
-			),
-			validator: (value, output) => {
-				if (
-					(value === "debuts" || value === "debutsForever") &&
-					output.realStats !== "none"
-				) {
-					throw new Error(
-						'Random debuts only works with "Historical Stats" set to "None"',
-					);
-				}
-				if (
-					(value === "debutsKeepCurrent" ||
-						value === "debutsForeverKeepCurrent") &&
-					output.realStats !== "none" &&
-					output.realStats !== "lastSeason" &&
-					output.realStats !== "allActive"
-				) {
-					throw new Error(
-						'Random debuts (keep current rosters) only works with "Historical Stats" set to "None", "Last season, active players only", or "All seasons, active players only"',
-					);
-				}
-			},
-		},
 		...(SPORT_HAS_REAL_PLAYERS
 			? ([
 					{
 						category: "New League",
 						key: "randomization",
 						name: "Randomization",
-						showOnlyIf: ({
-							defaultNewLeagueSettings,
-							newLeague,
-							hasPlayers,
-							realPlayers,
-						}) =>
-							newLeague &&
-							hasPlayers &&
-							!realPlayers &&
-							!defaultNewLeagueSettings,
+						showOnlyIf: ({ newLeague, hasPlayers, realPlayers }) =>
+							newLeague && hasPlayers && realPlayers,
+						type: "string",
+						values: [
+							{ key: "none", value: "None" },
+							{ key: "debuts", value: "Random debuts" },
+							{
+								key: "debutsKeepCurrent",
+								value: "Random debuts (keep current rosters)",
+							},
+							{ key: "debutsForever", value: "Random debuts forever" },
+							{
+								key: "debutsForeverKeepCurrent",
+								value: "Random debuts forever (keep current rosters)",
+							},
+							{ key: "shuffle", value: "Shuffle rosters" },
+						],
+						descriptionLong: (
+							<>
+								<p>
+									<b>Random debuts:</b> Every player's draft year is randomized.
+									Starting teams and future draft classes are all random
+									combinations of past, current, and future real players.
+								</p>
+								<p>
+									<b>Random debuts forever:</b> Like random debuts, except when
+									it runs out of draft prospects, it will randomize all real
+									players again and add them to future draft classes.
+								</p>
+								<p>
+									<b>(keep current rosters)</b> means that the current rosters
+									will not be randomized, only future draft classes.
+								</p>
+								<p>
+									<b>Shuffle rosters:</b> All active players are placed on
+									random teams.
+								</p>
+							</>
+						),
+						validator: (value, output) => {
+							if (
+								(value === "debuts" || value === "debutsForever") &&
+								output.realStats !== "none"
+							) {
+								throw new Error(
+									'Random debuts only works with "Historical Stats" set to "None"',
+								);
+							}
+							if (
+								(value === "debutsKeepCurrent" ||
+									value === "debutsForeverKeepCurrent") &&
+								output.realStats !== "none" &&
+								output.realStats !== "lastSeason" &&
+								output.realStats !== "allActive"
+							) {
+								throw new Error(
+									'Random debuts (keep current rosters) only works with "Historical Stats" set to "None", "Last season, active players only", or "All seasons, active players only"',
+								);
+							}
+						},
+					},
+					{
+						category: "New League",
+						key: "randomization",
+						name: "Randomization",
+						showOnlyIf: ({ newLeague, hasPlayers, realPlayers }) =>
+							newLeague && hasPlayers && !realPlayers,
 						type: "string",
 						values: [
 							{ key: "none", value: "None" },
@@ -190,16 +181,8 @@ export const settings: Setting[] = (
 						category: "New League",
 						key: "randomization",
 						name: "Randomization",
-						showOnlyIf: ({
-							defaultNewLeagueSettings,
-							newLeague,
-							hasPlayers,
-							realPlayers,
-						}) =>
-							newLeague &&
-							!hasPlayers &&
-							!realPlayers &&
-							!defaultNewLeagueSettings,
+						showOnlyIf: ({ newLeague, hasPlayers, realPlayers }) =>
+							newLeague && !hasPlayers && !realPlayers,
 						type: "string",
 						values: [
 							{ key: "none", value: "None" },
@@ -220,22 +203,13 @@ export const settings: Setting[] = (
 							</>
 						),
 					},
-			  ] as Setting[])
+				] as Setting[])
 			: ([
 					{
 						category: "New League",
 						key: "randomization",
 						name: "Randomization",
-						showOnlyIf: ({
-							defaultNewLeagueSettings,
-							newLeague,
-							hasPlayers,
-							realPlayers,
-						}) =>
-							newLeague &&
-							hasPlayers &&
-							!realPlayers &&
-							!defaultNewLeagueSettings,
+						showOnlyIf: ({ newLeague, hasPlayers }) => newLeague && hasPlayers,
 						type: "string",
 						values: [
 							{ key: "none", value: "None" },
@@ -250,7 +224,7 @@ export const settings: Setting[] = (
 							</>
 						),
 					},
-			  ] as Setting[])),
+				] as Setting[])),
 		{
 			category: "New League",
 			key: "realDraftRatings",
@@ -363,12 +337,20 @@ export const settings: Setting[] = (
 			godModeRequired: "always",
 			type: "int",
 			validator: (value, output) => {
-				if (!isSport("football") && value < output.numPlayersOnCourt) {
-					throw new Error(`Value cannot be less than # Players On ${COURT}`);
-				}
-				if (isSport("hockey") && value < 12) {
-					// Game sim crashes with fewer than 12 players currently. Otherwise, should be no limit.
-					throw new Error("Value must be at least 12");
+				const cutoff = bySport({
+					baseball: 10,
+					basketball: output.numPlayersOnCourt,
+					football: 11,
+
+					// Game crashes with less than 12 currently
+					hockey: 12,
+				});
+				if (value < cutoff) {
+					if (isSport("basketball")) {
+						throw new Error(`Value cannot be less than # Players On ${COURT}`);
+					} else {
+						throw new Error(`Value must be at least ${cutoff}`);
+					}
 				}
 			},
 		},
@@ -1654,7 +1636,7 @@ export const settings: Setting[] = (
 			},
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "pace",
 			name: "Pace",
 			godModeRequired: "always",
@@ -1674,7 +1656,7 @@ export const settings: Setting[] = (
 			},
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "foulFactor",
 			name: "Foul Ball Factor",
 			godModeRequired: "always",
@@ -1683,7 +1665,7 @@ export const settings: Setting[] = (
 				"The probability that a batted ball is foul is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "groundFactor",
 			name: "Ground Ball Factor",
 			godModeRequired: "always",
@@ -1692,7 +1674,7 @@ export const settings: Setting[] = (
 				"The likelihood of ground balls is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "lineFactor",
 			name: "Line Drive Factor",
 			godModeRequired: "always",
@@ -1701,7 +1683,7 @@ export const settings: Setting[] = (
 				"The likelihood of line drives is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "flyFactor",
 			name: "Fly Ball Factor",
 			godModeRequired: "always",
@@ -1710,7 +1692,7 @@ export const settings: Setting[] = (
 				"The likelihood of fly balls drives is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "powerFactor",
 			name: "Power Factor",
 			godModeRequired: "always",
@@ -1728,7 +1710,7 @@ export const settings: Setting[] = (
 				"If you disable three pointers, shots from that range will still be displayed as three pointers in stats tables, but they will only count for two points.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "threePointTendencyFactor",
 			name: "Three Point Tendency Factor",
 			godModeRequired: "always",
@@ -1737,7 +1719,7 @@ export const settings: Setting[] = (
 				"The baseline rate for number of three pointers is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "threePointAccuracyFactor",
 			name: "Three Point Accuracy Factor",
 			godModeRequired: "always",
@@ -1746,7 +1728,7 @@ export const settings: Setting[] = (
 				"The baseline rate for three point percentage is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "twoPointAccuracyFactor",
 			name: "Two Point Accuracy Factor",
 			godModeRequired: "always",
@@ -1755,7 +1737,7 @@ export const settings: Setting[] = (
 				"The baseline rate for two point percentage is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "ftAccuracyFactor",
 			name: "FT Accuracy Factor",
 			godModeRequired: "always",
@@ -1764,7 +1746,7 @@ export const settings: Setting[] = (
 				"The baseline rate for free throw percentage is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "blockFactor",
 			name: "Block Tendency Factor",
 			godModeRequired: "always",
@@ -1773,7 +1755,7 @@ export const settings: Setting[] = (
 				"The baseline block percentage is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "stealFactor",
 			name: "Steal Tendency Factor",
 			godModeRequired: "always",
@@ -1783,7 +1765,7 @@ export const settings: Setting[] = (
 				: "The probability of a player attempting a steal is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "turnoverFactor",
 			name: "Turnover Tendency Factor",
 			godModeRequired: "always",
@@ -1792,7 +1774,7 @@ export const settings: Setting[] = (
 				"The baseline turnover percentage is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "orbFactor",
 			name: "Off Reb Tendency Factor",
 			godModeRequired: "always",
@@ -1801,7 +1783,7 @@ export const settings: Setting[] = (
 				"The baseline offensive rebound percentage is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "foulRateFactor",
 			name: `${isSport("football") ? "Penalty" : "Foul"} Rate Factor`,
 			godModeRequired: "always",
@@ -1821,7 +1803,7 @@ export const settings: Setting[] = (
 			},
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "passFactor",
 			name: "Passing Tendency Factor",
 			godModeRequired: "always",
@@ -1830,7 +1812,7 @@ export const settings: Setting[] = (
 				"The probability of calling a passing play is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "rushYdsFactor",
 			name: "Rushing Yards Factor",
 			godModeRequired: "always",
@@ -1838,7 +1820,7 @@ export const settings: Setting[] = (
 			description: "The baseline yards per rush is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "passYdsFactor",
 			name: "Passing Yards Factor",
 			godModeRequired: "always",
@@ -1846,7 +1828,7 @@ export const settings: Setting[] = (
 			description: "The baseline yards per pass is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "completionFactor",
 			name: "Completion Factor",
 			godModeRequired: "always",
@@ -1855,7 +1837,7 @@ export const settings: Setting[] = (
 				"The baseline pass completion percentage is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "scrambleFactor",
 			name: "QB Scramble Factor",
 			godModeRequired: "always",
@@ -1864,7 +1846,7 @@ export const settings: Setting[] = (
 				"The probability of a quarterback scrambling on a passing play is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "sackFactor",
 			name: "Sack Factor",
 			godModeRequired: "always",
@@ -1873,7 +1855,7 @@ export const settings: Setting[] = (
 				"The baseline sack probability is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "fumbleFactor",
 			name: "Fumble Factor",
 			godModeRequired: "always",
@@ -1882,7 +1864,7 @@ export const settings: Setting[] = (
 				"The baseline fumble probability is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "intFactor",
 			name: "Interception Factor",
 			godModeRequired: "always",
@@ -1891,7 +1873,7 @@ export const settings: Setting[] = (
 				"The baseline interception probability is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "fgAccuracyFactor",
 			name: "FG Accuracy Factor",
 			godModeRequired: "always",
@@ -1900,7 +1882,7 @@ export const settings: Setting[] = (
 				"The baseline field goal accuracy percentage is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "fourthDownFactor",
 			name: "4th Down Aggressiveness Factor",
 			godModeRequired: "always",
@@ -1909,7 +1891,7 @@ export const settings: Setting[] = (
 				"The probability to go for it on 4th down is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "onsideFactor",
 			name: "Onside Kick Factor",
 			godModeRequired: "always",
@@ -1918,7 +1900,7 @@ export const settings: Setting[] = (
 				"The probability of doing an onside kick is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "onsideRecoveryFactor",
 			name: "Onside Recovery Factor",
 			godModeRequired: "always",
@@ -1927,7 +1909,7 @@ export const settings: Setting[] = (
 				"The probability of the kicking team recovering an onside kick is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "throwOutFactor",
 			name: "Throw Out Factor",
 			godModeRequired: "always",
@@ -1936,7 +1918,7 @@ export const settings: Setting[] = (
 				"The probability of the catcher successfully throwing out a stealing baserunner is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "strikeFactor",
 			name: "Strike Factor",
 			godModeRequired: "always",
@@ -1945,7 +1927,7 @@ export const settings: Setting[] = (
 				"The probability of the pitcher throwing a strike is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "balkFactor",
 			name: "Balk Factor",
 			godModeRequired: "always",
@@ -1953,7 +1935,7 @@ export const settings: Setting[] = (
 			description: "The probability of a balk is multipled by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "wildPitchFactor",
 			name: "Wild Pitch Factor",
 			godModeRequired: "always",
@@ -1962,7 +1944,7 @@ export const settings: Setting[] = (
 				"The probability of a wild pitch is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "passedBallFactor",
 			name: "Passed Ball Factor",
 			godModeRequired: "always",
@@ -1971,7 +1953,7 @@ export const settings: Setting[] = (
 				"The probability of a passed ball is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "hitByPitchFactor",
 			name: "Hit By Pitch Factor",
 			godModeRequired: "always",
@@ -1980,7 +1962,7 @@ export const settings: Setting[] = (
 				"The probability of the batter being hit by a pitch is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "swingFactor",
 			name: "Swing Factor",
 			godModeRequired: "always",
@@ -1989,7 +1971,7 @@ export const settings: Setting[] = (
 				"The probability of the batter swinging at a pitch is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "contactFactor",
 			name: "Contact Factor",
 			godModeRequired: "always",
@@ -1998,7 +1980,7 @@ export const settings: Setting[] = (
 				"The probability of a swing making contact is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "deflectionFactor",
 			name: "Deflection Factor",
 			godModeRequired: "always",
@@ -2007,7 +1989,7 @@ export const settings: Setting[] = (
 				"The probability of the offense deflecting a shot is multiplied by this number",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "saveFactor",
 			name: "Save Factor",
 			godModeRequired: "always",
@@ -2016,7 +1998,7 @@ export const settings: Setting[] = (
 				"The save probability of each shot is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "assistFactor",
 			name: "Assist Factor",
 			godModeRequired: "always",
@@ -2025,7 +2007,7 @@ export const settings: Setting[] = (
 				"The probability that a shot is assisted is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "hitFactor",
 			name: "Hit Factor",
 			godModeRequired: "always",
@@ -2035,7 +2017,7 @@ export const settings: Setting[] = (
 				: "The probability that a ball in play is a hit is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "giveawayFactor",
 			name: "Giveaway Factor",
 			godModeRequired: "always",
@@ -2044,7 +2026,7 @@ export const settings: Setting[] = (
 				"The probability of a giveaway happening is multiplied by this number.",
 		},
 		{
-			category: "Game Simulation",
+			category: "Tendencies",
 			key: "takeawayFactor",
 			name: "Takeaway Factor",
 			godModeRequired: "always",
@@ -2179,26 +2161,97 @@ export const settings: Setting[] = (
 			description:
 				"This is the percentage boost/penalty given to home/away player ratings. Default is 1%.",
 		},
-		{
-			category: "Game Simulation",
-			key: "maxOvertimes",
-			name: `Max # ${
-				isSport("baseball") ? "Extra Innings" : "Overtime Periods"
-			}`,
-			type: "intOrNull",
-			description: `If a game is still tied after this many ${
-				isSport("baseball") ? "extra innings" : "overtimes"
-			}, the result is a tie. Set to 0 to disable ${
-				isSport("baseball") ? "extra innings" : "overtime"
-			}. Leave blank for infinite ${
-				isSport("baseball") ? "extra innings" : "overtimes"
-			} and no ties. In the playoffs there are never ties, regardless of this setting.`,
-			validator: value => {
-				if (typeof value === "number" && value < 0) {
-					throw new Error("Cannot be negative");
-				}
-			},
-		},
+		...(["maxOvertimes", "maxOvertimesPlayoffs"] as const).map(key => {
+			const playoffs = key === "maxOvertimesPlayoffs";
+
+			const setting: Setting = {
+				category: "Game Simulation",
+				key,
+				name: `Max # ${
+					isSport("baseball") ? "Extra Innings" : "Overtime Periods"
+				}${playoffs ? " (Playoffs)" : ""}`,
+				type: "intOrNull",
+				descriptionLong: (
+					<>
+						<p>
+							If a{playoffs ? " playoff" : ""} game is still tied after this
+							many {isSport("baseball") ? "extra innings" : "overtimes"}, the
+							game ends in a{" "}
+							{playoffs
+								? "shootout (Shootout Rounds must be >0, there can be no ties in the playoffs)"
+								: "tie (or a shootout, if Shootout Rounds is > 0)"}
+							.
+						</p>
+						<p>
+							Set to 0 to disable{" "}
+							{isSport("baseball") ? "extra innings" : "overtime"}. Leave blank
+							for infinite {isSport("baseball") ? "extra innings" : "overtimes"}
+							{playoffs ? "" : " and no ties"}.
+						</p>
+					</>
+				),
+				validator: value => {
+					if (typeof value === "number" && value < 0) {
+						throw new Error("Cannot be negative");
+					}
+				},
+			};
+
+			return setting;
+		}),
+		...(["shootoutRounds", "shootoutRoundsPlayoffs"] as const).map(key => {
+			const playoffs = key === "shootoutRoundsPlayoffs";
+			const overtimePeriods = isSport("baseball")
+				? "extra innings"
+				: "overtime periods";
+
+			const setting: Setting = {
+				category: "Game Simulation",
+				key,
+				name: `# Shootout Rounds ${playoffs ? " (Playoffs)" : ""}`,
+				type: "int",
+				descriptionLong: (
+					<>
+						<p>
+							If this value is greater than 0 and the max # of {overtimePeriods}{" "}
+							have elapsed, then the game will end in a shootout.
+						</p>
+						<p>
+							{bySport({
+								baseball:
+									"For baseball, that means a home run derby! This setting specifies the # of swings/strikes your best hitter will get againts a pitcher from your own team throwing meatballs. If the game is still tied after both teams go, then it's repeated until someone wins.",
+								basketball:
+									"For basketball, that means a three-point contest! This setting specifies the # of shots your best shooter will get. If the game is still tied after both teams go, then it's repeated until someone wins.",
+								football:
+									"For football, that means a field goal contest! This setting specifies the number of 50 yard field goals each team will attempt. If it's still tied after that, then additional rounds will be played until there is a winner.",
+								hockey:
+									"For hockey, that means a penalty shootout. This setting specifies the number of players from each team who will take turns attempting penalty shots. If it's still tied after that, then additional rounds will be played until there is a winner.",
+							})}
+						</p>
+						<p>Set to 0 to disable shootouts.</p>
+						{playoffs ? (
+							<p>
+								In the playoffs, this must be greater than 0 if you have a max #
+								of overtimes, because playoff games cannot end in a tie.
+							</p>
+						) : null}
+					</>
+				),
+				validator: (value, output) => {
+					if (typeof value === "number" && value < 0) {
+						throw new Error("Cannot be negative");
+					}
+
+					if (playoffs && output.maxOvertimesPlayoffs !== null && value < 1) {
+						throw new Error(
+							`Must be >0 if there is a limit to the number of playoff ${overtimePeriods}`,
+						);
+					}
+				},
+			};
+
+			return setting;
+		}),
 		{
 			category: "Game Simulation",
 			key: "otl",

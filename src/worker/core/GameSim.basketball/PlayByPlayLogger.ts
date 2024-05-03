@@ -336,6 +336,29 @@ type PlayByPlayEventInputNoScore =
 			t: TeamNum;
 			on: "offense" | "defense";
 			clock: number;
+	  }
+	| {
+			type: "shootoutStart";
+			rounds: number;
+			clock: number;
+	  }
+	| {
+			type: "shootoutTeam";
+			t: TeamNum;
+			pid: number;
+	  }
+	| {
+			type: "shootoutShot";
+			t: TeamNum;
+			pid: number;
+			made: boolean;
+	  }
+	| {
+			type: "shootoutTie";
+	  }
+	| {
+			type: "timeouts";
+			timeouts: [number, number];
 	  };
 
 type PlayByPlayEventInput =

@@ -13,6 +13,8 @@ import {
 	WEBSITE_ROOT,
 	unwrapGameAttribute,
 	LEAGUE_DATABASE_VERSION,
+	ACCOUNT_API_URL,
+	fetchWrapper,
 } from "../../../common";
 import {
 	ActionButton,
@@ -141,7 +143,7 @@ const initKeptKeys = ({
 
 export const MIN_SEASON = 1947;
 export const MAX_SEASON = 2024;
-const MAX_PHASE = PHASE.PRESEASON;
+const MAX_PHASE = PHASE.PLAYOFFS;
 
 const seasons: { key: string; value: string }[] = [];
 for (let i = MAX_SEASON; i >= MIN_SEASON; i--) {
@@ -829,6 +831,7 @@ const NewLeague = (props: View<"newLeague">) => {
 						settings.randomization === "debutsForeverKeepCurrent",
 					realDraftRatings: settings.realDraftRatings,
 					realStats: settings.realStats,
+					includePlayers: state.keptKeys.includes("players"),
 				};
 			} else if (state.customize === "legends") {
 				getLeagueOptions = {
@@ -884,6 +887,17 @@ const NewLeague = (props: View<"newLeague">) => {
 				team: teamRegionName,
 				league_id: lid,
 			});
+			if (window.enableLogging) {
+				fetchWrapper({
+					url: `${ACCOUNT_API_URL}/log_event.php`,
+					method: "POST",
+					data: {
+						sport: process.env.SPORT,
+						type: "new_league",
+					},
+					credentials: "include",
+				});
+			}
 
 			realtimeUpdate([], `/l/${lid}`);
 		} catch (err) {
@@ -1002,7 +1016,7 @@ const NewLeague = (props: View<"newLeague">) => {
 						: {
 								...props.defaultSettings,
 								randomization: leagueInfo.randomization,
-						  },
+							},
 				startingSeason: leagueInfo.startingSeason,
 			});
 		},
@@ -1282,6 +1296,7 @@ const NewLeague = (props: View<"newLeague">) => {
 															state.settings.randomization ===
 																"debutsForeverKeepCurrent",
 														realDraftRatings: state.settings.realDraftRatings,
+														includePlayers: false,
 
 														// Adding historical seasons just screws up tid
 														realStats: "none",
@@ -1393,7 +1408,7 @@ const NewLeague = (props: View<"newLeague">) => {
 														? "Loading..."
 														: `${t.region} ${t.name}${
 																t.season !== undefined ? ` (${t.season})` : ""
-														  }`}
+															}`}
 												</option>
 											);
 										})}

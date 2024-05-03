@@ -1,4 +1,4 @@
-import { isScoringPlay } from "../../../common/isScoringPlay.football";
+import { formatScoringSummaryEvent } from "../../../common/formatScoringSummaryEvent.football";
 import type { TeamNum } from "./types";
 
 export type PlayByPlayEventInputScore =
@@ -98,9 +98,18 @@ export type PlayByPlayEventInputScore =
 			type: "twoPointConversionFailed";
 			clock: number;
 			t: TeamNum;
+	  }
+	| {
+			type: "shootoutShot";
+			t: TeamNum;
+			names: string[];
+			made: boolean;
+			att: number;
+			yds: number;
+			clock: number;
 	  };
 
-type PlayByPlayEventInput =
+export type PlayByPlayEventInput =
 	| PlayByPlayEventInputScore
 	| {
 			type: "quarter";
@@ -231,6 +240,19 @@ type PlayByPlayEventInput =
 			type: "turnoverOnDowns";
 			clock: number;
 			t: TeamNum;
+	  }
+	| {
+			type: "shootoutStart";
+			rounds: number;
+			clock: number;
+	  }
+	| {
+			type: "shootoutTie";
+			clock: number;
+	  }
+	| {
+			type: "timeouts";
+			timeouts: [number, number];
 	  };
 
 export type PlayByPlayEvent =
@@ -295,11 +317,9 @@ class PlayByPlayLogger {
 			});
 		}
 
-		if (isScoringPlay(event)) {
-			this.scoringSummary.push({
-				...event,
-				quarter: this.quarter,
-			});
+		const scoringSummaryEvent = formatScoringSummaryEvent(event, this.quarter);
+		if (scoringSummaryEvent) {
+			this.scoringSummary.push(scoringSummaryEvent);
 		}
 	}
 

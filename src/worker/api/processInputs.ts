@@ -79,7 +79,7 @@ export const validateSeason = (season?: number | string): number => {
 	return season;
 };
 
-type SeasonType = "playoffs" | "regularSeason" | "combined";
+export type SeasonType = "playoffs" | "regularSeason" | "combined";
 const validateSeasonType = (
 	seasonType: string | undefined,
 	defaultType: SeasonType = "regularSeason",
@@ -815,7 +815,7 @@ const standings = (params: Params) => {
 					basketball: "conf",
 					football: "div",
 					hockey: "div",
-			  });
+				});
 	if (
 		params.type === "conf" ||
 		params.type === "div" ||
@@ -936,6 +936,37 @@ const validateSeasonOnly = (params: Params) => {
 	};
 };
 
+const comparePlayers = (params: Params) => {
+	const players: {
+		pid: number;
+		season: number | "career";
+		playoffs: SeasonType;
+	}[] = [];
+
+	const info = params.info;
+	if (info !== undefined) {
+		players.push(
+			...info.split(",").map(pidSeasonPlayoffs => {
+				const parts = pidSeasonPlayoffs.split("-");
+				return {
+					pid: parseInt(parts[0]),
+					season: parts[1] === "career" ? "career" : parseInt(parts[1]),
+					playoffs:
+						parts[2] === "c"
+							? "combined"
+							: parts[2] === "p"
+								? "playoffs"
+								: "regularSeason",
+				} as const;
+			}),
+		);
+	}
+
+	return {
+		players,
+	};
+};
+
 export default {
 	account,
 	allStarDunk: validateSeasonOnly,
@@ -944,6 +975,7 @@ export default {
 	awardRaces: validateSeasonOnly,
 	awardsRecords,
 	customizePlayer,
+	comparePlayers,
 	dailySchedule,
 	depth,
 	draft,

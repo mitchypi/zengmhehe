@@ -35,7 +35,7 @@ type State = {
 type Action =
 	| {
 			type: "init";
-			props: Props;
+			props: Pick<Props, "result" | "season" | "draftType">;
 	  }
 	| {
 			type: "startClicked";
@@ -108,6 +108,7 @@ const reducer = (state: State, action: Action): State => {
 const Row = ({
 	NUM_PICKS,
 	i,
+	pickAlreadyMade,
 	season,
 	t,
 	userTid,
@@ -118,6 +119,7 @@ const Row = ({
 }: {
 	NUM_PICKS: number;
 	i: number;
+	pickAlreadyMade: boolean;
 	season: number;
 	t: DraftLotteryResultArray[number];
 	userTid: number;
@@ -192,7 +194,7 @@ const Row = ({
 				{revealedPickNumber}
 			</td>
 			<td className={spectator ? "p-0" : undefined}>
-				{userTeam || spectator ? null : (
+				{userTeam || spectator || pickAlreadyMade ? null : (
 					<button
 						className="btn btn-xs btn-light-bordered"
 						onClick={async () => {
@@ -293,6 +295,7 @@ const Rigged = ({
 };
 
 const DraftLotteryTable = (props: Props) => {
+	console.log("render table", props.result);
 	const isMounted = useRef(true);
 	useEffect(() => {
 		return () => {
@@ -315,10 +318,15 @@ const DraftLotteryTable = (props: Props) => {
 		season: props.season,
 	});
 
-	if (props.season !== state.season) {
+	// Handle changing season, and updating state.result due to game sim
+	if (
+		props.season !== state.season ||
+		props.draftType !== state.draftType ||
+		(revealState.current === "init" && props.result !== state.result)
+	) {
 		numLeftToReveal.current = 0;
 		revealState.current = "init";
-		dispatch({ type: "init", props: props });
+		dispatch({ type: "init", props });
 	}
 
 	const revealPickAuto = () => {
@@ -386,7 +394,15 @@ const DraftLotteryTable = (props: Props) => {
 		dispatch({ type: "revealOne" });
 	};
 
-	const { godMode, numToPick, rigged, season, type, userTid } = props;
+	const {
+		dpidsAvailableToTrade,
+		godMode,
+		numToPick,
+		rigged,
+		season,
+		type,
+		userTid,
+	} = props;
 	const { draftType, result } = state;
 	const { tooSlow, probs } = getDraftLotteryProbs(result, draftType, numToPick);
 	const NUM_PICKS = result !== undefined ? result.length : 14;
@@ -470,6 +486,7 @@ const DraftLotteryTable = (props: Props) => {
 									key={i}
 									NUM_PICKS={NUM_PICKS}
 									i={i}
+									pickAlreadyMade={!dpidsAvailableToTrade.has(t.dpid)}
 									season={season}
 									t={t}
 									userTid={userTid}

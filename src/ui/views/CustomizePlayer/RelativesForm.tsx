@@ -9,6 +9,29 @@ import {
 import SelectMultiple from "../../components/SelectMultiple";
 import { helpers, toWorker } from "../../util";
 
+export type PlayerInfoForName = {
+	pid: number;
+	firstName: string;
+	lastName: string;
+	firstSeason: number;
+	lastSeason: number;
+};
+
+export const formatName = (p: PlayerInfoForName) => {
+	let name = p.firstName;
+	if (p.lastName) {
+		name += ` ${p.lastName}`;
+	}
+
+	if (p.firstSeason !== p.lastSeason) {
+		name += ` (${p.firstSeason}-${p.lastSeason})`;
+	} else {
+		name += ` (${p.firstSeason})`;
+	}
+
+	return name;
+};
+
 const RelativesForm = ({
 	gender,
 	godMode,
@@ -27,10 +50,7 @@ const RelativesForm = ({
 			};
 		},
 	) => void;
-	initialPlayers: {
-		name: string;
-		pid: number;
-	}[];
+	initialPlayers: PlayerInfoForName[];
 	relatives: {
 		name: string;
 		pid: number | string;
@@ -41,7 +61,7 @@ const RelativesForm = ({
 		"init" | "loading" | "done"
 	>("init");
 	const [allPlayers, setAllPlayers] = useState<
-		{ pid: number; name: string }[] | undefined
+		PlayerInfoForName[] | undefined
 	>();
 	const candidateRelatives = allPlayers ?? initialPlayers;
 
@@ -109,7 +129,7 @@ const RelativesForm = ({
 								onChange={p => {
 									handleRelativesChange(i, "pid", String(p!.pid));
 								}}
-								getOptionLabel={p => p.name}
+								getOptionLabel={p => formatName(p)}
 								getOptionValue={p => String(p.pid)}
 								disabled={!godMode}
 								loading={allPlayersState === "loading"}
@@ -167,16 +187,16 @@ const RelativesForm = ({
 					type="button"
 					variant="secondary"
 				>
-					{allPlayersState === "done" ? "Done!" : "Load Retired Players"}
+					{allPlayersState === "done" ? "Done!" : "Load retired players"}
 				</ActionButton>
-				<HelpPopover title="Load Retired Players">
+				<HelpPopover title="Load retired players">
 					<p>
 						By default, only active players are shown as selectable options in
 						the relatives form. This is for performance reasons, to handle
 						leagues where people have played many seasons.
 					</p>
 					<p>
-						If you press the "Load Retired Players" button and wait for it to
+						If you press the "Load retired players" button and wait for it to
 						load, then retired players will be available to select as well.
 					</p>
 				</HelpPopover>

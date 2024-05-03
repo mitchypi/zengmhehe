@@ -841,7 +841,7 @@ class Play {
 		}
 
 		// No first down or turnover on downs if extra point or two-point conversion - see issue #396
-		if (state.awaitingAfterTouchdown) {
+		if (state.awaitingAfterTouchdown || state.awaitingAfterSafety) {
 			return;
 		}
 
@@ -1247,8 +1247,6 @@ class Play {
 			this.state.current = result.state;
 
 			if (result.indexAccept >= 0 || offsetStatus === "offset") {
-				let numPenaltiesSeen = 0;
-
 				const statChanges = [
 					// Apply statChanges from accepted penalty
 					...result.statChanges,
@@ -1256,13 +1254,9 @@ class Play {
 					// Apply negative statChanges from anything after accepted penalty
 					...this.events
 						.filter((event, i) => {
-							// Don't remove the accepted penalty, since we only just added it here! It is not like other events which are added previously
+							// Don't undo any penalties (whether accepted or not) because they are never added to stats, except from result.statChanges right above here
 							if (event.event.type === "penalty") {
-								if (result.indexAccept === numPenaltiesSeen) {
-									numPenaltiesSeen += 1;
-									return false;
-								}
-								numPenaltiesSeen += 1;
+								return false;
 							}
 
 							return result.indexEvent === undefined || i > result.indexEvent;
@@ -1286,6 +1280,16 @@ class Play {
 
 				for (const statChange of statChanges) {
 					this.g.recordStat(...statChange);
+				}
+
+				// Do we need to revert a score (or missed field goal) for a penalty?
+				if (
+					statChanges.some(
+						([, p, stat]) =>
+							(stat === "pts" && p === undefined) || stat.startsWith("fga"),
+					)
+				) {
+					this.g.playByPlay.removeLastScore();
 				}
 			}
 		}

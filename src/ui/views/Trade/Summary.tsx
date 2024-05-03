@@ -6,8 +6,25 @@ import { PlayerNameLabels, SafeHtml } from "../../components";
 import { ContractAmount } from "../../components/contract";
 import type { HandleToggle } from ".";
 import { isSport } from "../../../common";
+import type { MissingAsset } from "../../../worker/views/savedTrades";
 
 // Arrow is https://icons.getbootstrap.com/icons/arrow-right/ v1.8.1
+export const arrow = (
+	<svg
+		xmlns="http://www.w3.org/2000/svg"
+		width="14"
+		height="14"
+		fill="currentColor"
+		viewBox="0 0 16 16"
+		style={{ marginBottom: 1 }}
+	>
+		<path
+			fillRule="evenodd"
+			d="M1 8a.5.5 0 0 1 .5-.5h11.793l-3.147-3.146a.5.5 0 0 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L13.293 8.5H1.5A.5.5 0 0 1 1 8z"
+		/>
+	</svg>
+);
+
 export const OvrChange = ({
 	after,
 	before,
@@ -17,20 +34,7 @@ export const OvrChange = ({
 }) => {
 	return (
 		<>
-			{before}{" "}
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				width="14"
-				height="14"
-				fill="currentColor"
-				viewBox="0 0 16 16"
-				style={{ marginBottom: 1 }}
-			>
-				<path
-					fillRule="evenodd"
-					d="M1 8a.5.5 0 0 1 .5-.5h11.793l-3.147-3.146a.5.5 0 0 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L13.293 8.5H1.5A.5.5 0 0 1 1 8z"
-				/>
-			</svg>{" "}
+			{before} {arrow}{" "}
 			<span
 				className={classNames({
 					"text-success": after > before,
@@ -49,6 +53,7 @@ export const SummaryTeam = ({
 	hideFinanceInfo,
 	hideTeamOvr,
 	luxuryPayroll,
+	missingAssets,
 	salaryCap,
 	salaryCapType,
 	showInlinePlayerInfo,
@@ -62,6 +67,7 @@ export const SummaryTeam = ({
 	handleRemove?: (type: "player" | "pick", id: number) => void;
 	hideFinanceInfo?: boolean;
 	hideTeamOvr?: boolean;
+	missingAssets?: MissingAsset[];
 	showInlinePlayerInfo?: boolean;
 	t: View<"trade">["summary"]["teams"][number];
 }) => {
@@ -144,6 +150,67 @@ export const SummaryTeam = ({
 					<li>Nothing</li>
 				) : null}
 			</ul>
+			{missingAssets && missingAssets.length > 0 ? (
+				<div className="mt-1">
+					<h4 className="fw-bold mb-1 text-danger">
+						Assets no longer available:
+					</h4>
+					<ul className="list-unstyled mb-0">
+						{missingAssets.map((asset, i) => {
+							return (
+								<li key={i}>
+									{asset.type === "deletedPlayer" ? (
+										<span className="text-danger">
+											Player {asset.pid} was deleted
+										</span>
+									) : asset.type === "noLongerOnTeam" ? (
+										<>
+											<PlayerNameLabels
+												pid={asset.pid}
+												legacyName={asset.name}
+												pos={asset.pos}
+											/>
+											<div className="ms-2 text-danger">Not on roster</div>
+										</>
+									) : asset.type === "retired" ? (
+										<>
+											<PlayerNameLabels
+												pid={asset.pid}
+												legacyName={asset.name}
+												pos={asset.pos}
+											/>
+											<div className="ms-2 text-danger">Retired</div>
+										</>
+									) : asset.type === "untradable" ? (
+										<>
+											<PlayerNameLabels
+												pid={asset.pid}
+												legacyName={asset.name}
+												pos={asset.pos}
+											/>
+											<div className="ms-2 text-danger">{asset.message}</div>
+										</>
+									) : asset.type === "tradedPick" ? (
+										<>
+											<SafeHtml dirty={asset.desc} />
+											<div className="ms-2 text-danger">Traded away</div>
+										</>
+									) : asset.type === "pastDraft" ? (
+										<>
+											Draft pick
+											<div className="ms-2 text-danger">
+												Draft already happened
+											</div>
+										</>
+									) : (
+										"???"
+									)}
+								</li>
+							);
+						})}
+					</ul>
+				</div>
+			) : null}
 			{!hideFinanceInfo || !hideTeamOvr ? (
 				<ul className="list-unstyled mt-1">
 					{!hideFinanceInfo ? (

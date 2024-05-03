@@ -1168,6 +1168,17 @@ const generateJSONSchema = (sport /*: string*/) => {
 									},
 								],
 							}),
+							maxOvertimesPlayoffs: wrap({
+								anyOf: [
+									{
+										type: "integer",
+										minimum: 0,
+									},
+									{
+										type: "null",
+									},
+								],
+							}),
 							numPeriods: {
 								type: "number",
 								minimum: 0,
@@ -1235,6 +1246,14 @@ const generateJSONSchema = (sport /*: string*/) => {
 							},
 							season: {
 								type: "integer",
+							},
+							shootoutRounds: {
+								type: "integer",
+								minimum: 0,
+							},
+							shootoutRoundsPlayoffs: {
+								type: "integer",
+								minimum: 0,
 							},
 							softCapTradeSalaryMatch: {
 								type: "number",
@@ -1591,8 +1610,9 @@ const generateJSONSchema = (sport /*: string*/) => {
 							type: "integer",
 						},
 						stats: {},
-						won: {
-							type: "boolean",
+						result: {
+							type: "string",
+							enum: ["W", "L", "T"],
 						},
 						score: {
 							type: "string",
@@ -1612,7 +1632,6 @@ const generateJSONSchema = (sport /*: string*/) => {
 						"playoffs",
 						"gid",
 						"stats",
-						"won",
 						"score",
 						"overtimes",
 					],
@@ -2616,6 +2635,21 @@ const generateJSONSchema = (sport /*: string*/) => {
 						...depth,
 					},
 					required: ["cid", "did", "region", "name", "abbrev"],
+				},
+			},
+			savedTrades: {
+				type: "array",
+				items: {
+					type: "object",
+					properties: {
+						hash: {
+							type: "string",
+						},
+						tid: {
+							type: "integer",
+						},
+					},
+					required: ["hash", "tid"],
 				},
 			},
 			trade: {

@@ -3,6 +3,9 @@ import { g } from "../util";
 import type { UpdateEvents, ViewInput } from "../../common/types";
 import { team } from "../core";
 import { groupBy, orderBy } from "../../common/utils";
+import { PHASE } from "../../common";
+import { loadAbbrevs } from "./gameLog";
+import getPlayoffsByConf from "../core/season/getPlayoffsByConf";
 
 const updateSeasonPreview = async (
 	{ season }: ViewInput<"seasonPreview">,
@@ -24,6 +27,34 @@ const updateSeasonPreview = async (
 			"noCopyCache",
 		);
 
+		const prevTeamTidsByPid = new Map<number, number>();
+
+		for (const p of playersRaw) {
+			const prevTid = p.stats.findLast(row => row.season === season - 1)?.tid;
+			if (prevTid === undefined) {
+				continue;
+			}
+
+			let currentTid;
+			if (
+				g.get("season") === season &&
+				(g.get("phase") === PHASE.PRESEASON ||
+					p.stats.find(row => row.season === season) === undefined)
+			) {
+				currentTid = p.tid;
+			} else {
+				currentTid = p.stats.find(row => row.season === season)?.tid;
+			}
+
+			if (currentTid === undefined || currentTid < 0) {
+				continue;
+			}
+
+			if (currentTid !== prevTid) {
+				prevTeamTidsByPid.set(p.pid, prevTid);
+			}
+		}
+
 		const players = await idb.getCopies.playersPlus(playersRaw, {
 			attrs: [
 				"pid",
@@ -42,10 +73,9 @@ const updateSeasonPreview = async (
 			showNoStats: true,
 		});
 
-		const playersTop = orderBy(players, p => p.ratings.ovr, "desc").slice(
-			0,
-			NUM_PLAYERS_TO_SHOW,
-		);
+		const playersTopAll = orderBy(players, p => p.ratings.ovr, "desc");
+
+		const playersTop = playersTopAll.slice(0, NUM_PLAYERS_TO_SHOW);
 		const playersImproving = orderBy(
 			players.filter(p => p.ratings.dovr > 0),
 			p => p.ratings.ovr + 2 * p.ratings.dovr,
@@ -61,6 +91,25 @@ const updateSeasonPreview = async (
 			p => p.ratings.ovr,
 			"desc",
 		).slice(0, NUM_PLAYERS_TO_SHOW);
+
+		const playersNewTeam = [];
+		if (prevTeamTidsByPid.size > 0) {
+			const prevAbbrevs = await loadAbbrevs(season - 1);
+			for (const p of playersTopAll) {
+				const prevTid = prevTeamTidsByPid.get(p.pid);
+				if (prevTid !== undefined) {
+					playersNewTeam.push({
+						...p,
+						prevTid,
+						prevAbbrev:
+							prevAbbrevs[prevTid] ?? g.get("teamInfoCache")[prevTid].abbrev,
+					});
+					if (playersNewTeam.length === NUM_PLAYERS_TO_SHOW) {
+						break;
+					}
+				}
+			}
+		}
 
 		const teamSeasonsCurrent = await idb.getCopies.teamSeasons(
 			{
@@ -101,7 +150,7 @@ const updateSeasonPreview = async (
 						tied: teamSeasonPrev.tied,
 						otl: teamSeasonPrev.otl,
 						playoffRoundsWon: teamSeasonPrev.playoffRoundsWon,
-				  }
+					}
 				: undefined;
 
 			return {
@@ -132,17 +181,18 @@ const updateSeasonPreview = async (
 		).slice(0, NUM_TEAMS_TO_SHOW);
 
 		// These are used when displaying last year's playoff results, so they are for last season
-		const numConfs = g.get("confs", season - 1).length;
 		const numPlayoffRounds = g.get("numGamesPlayoffSeries", season - 1).length;
+		const playoffsByConf = await getPlayoffsByConf(season - 1);
 
 		return {
 			challengeNoRatings: g.get("challengeNoRatings"),
-			numConfs,
 			numPlayoffRounds,
 			playersDeclining,
 			playersImproving,
+			playersNewTeam,
 			playersTop,
 			playersTopRookies,
+			playoffsByConf,
 			season,
 			teamsDeclining,
 			teamsImproving,

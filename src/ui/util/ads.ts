@@ -252,7 +252,6 @@ class Ads {
 		});
 	}
 
-	// If ads are not yet displayed, this will display them
 	refreshAll() {
 		if (this.state === "initialized") {
 			window.freestar.queue.push(() => {

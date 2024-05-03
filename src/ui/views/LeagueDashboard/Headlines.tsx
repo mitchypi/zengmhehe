@@ -1,61 +1,43 @@
 import { m, AnimatePresence } from "framer-motion";
 import { NewsBlock } from "../../components";
-import { helpers, useLocal } from "../../util";
+import { helpers } from "../../util";
 import type { View } from "../../../common/types";
-import { Component, createElement, memo } from "react";
-import type { ComponentType } from "react";
-import { throttle } from "throttle-debounce";
-
-// Similar to react-throttle-render
-const throttleRender = (wait: number) => {
-	return function <Props>(component: ComponentType<Props>) {
-		type State = { props: Props };
-		class Throttled extends Component<Props, State> {
-			throttledSetState: ((state: State) => void) & {
-				cancel: () => void;
-			};
-
-			constructor(props: Props) {
-				super(props);
-				this.state = {
-					props,
-				};
-
-				this.throttledSetState = throttle(wait, (nextState: State) =>
-					this.setState(nextState),
-				);
-			}
-
-			override shouldComponentUpdate(nextProps: Props, nextState: State) {
-				return this.state !== nextState;
-			}
-
-			override UNSAFE_componentWillReceiveProps(nextProps: Props) {
-				this.throttledSetState({ props: nextProps });
-			}
-
-			override componentWillUnmount() {
-				this.throttledSetState.cancel();
-			}
-
-			override render() {
-				// @ts-expect-error
-				return createElement(component, this.state.props);
-			}
-		}
-
-		return Throttled;
-	};
-};
+import { memo, useEffect, useRef, useState } from "react";
 
 const transition = { duration: 0.4, type: "tween" };
 
-const Headlines = ({
-	events,
-	season,
-	userTid,
-}: Pick<View<"leagueDashboard">, "events" | "season" | "userTid">) => {
-	const teamInfoCache = useLocal(state => state.teamInfoCache);
+// Inlined from https://github.com/uidotdev/usehooks/blob/dfa6623fcc2dcad3b466def4e0495b3f38af962b/index.js#L1241C1-L1262C2 cause it seems silly to depend on that whole package for this one little function. But then I noticed a couple bug and sent a PR https://github.com/uidotdev/usehooks/pull/302
+const useThrottle = <T extends unknown>(value: T, interval: number): T => {
+	const [throttledValue, setThrottledValue] = useState(value);
+	const lastUpdated = useRef(0);
+
+	useEffect(() => {
+		const now = Date.now();
+		const sinceLastUpdate = now - lastUpdated.current;
+
+		if (sinceLastUpdate >= interval) {
+			lastUpdated.current = now;
+			setThrottledValue(value);
+		} else {
+			const id = window.setTimeout(() => {
+				lastUpdated.current = Date.now();
+				setThrottledValue(value);
+			}, interval - sinceLastUpdate);
+
+			return () => window.clearTimeout(id);
+		}
+	}, [value, interval]);
+
+	return throttledValue;
+};
+
+type HeadlinesProps = Pick<
+	View<"leagueDashboard">,
+	"events" | "season" | "userTid" | "teams"
+>;
+
+const Headlines = ({ events, season, teams, userTid }: HeadlinesProps) => {
+	const throttledEvents = useThrottle(events, 2000);
 
 	return (
 		<>
@@ -64,7 +46,7 @@ const Headlines = ({
 			</h2>
 			<div className="row mb-1">
 				<AnimatePresence initial={false}>
-					{events.map(event => {
+					{throttledEvents.map(event => {
 						return (
 							<m.div
 								key={event.eid}
@@ -78,7 +60,7 @@ const Headlines = ({
 								<NewsBlock
 									event={event}
 									season={season}
-									teams={teamInfoCache}
+									teams={teams}
 									userTid={userTid}
 								/>
 							</m.div>
@@ -92,8 +74,10 @@ const Headlines = ({
 };
 
 const ThrottledComponent = memo(
-	throttleRender(2000)(Headlines),
-	(prevProps, nextProps) => {
+	Headlines,
+
+	// Unclear why these manual types are needed, they didn't used to be
+	(prevProps: HeadlinesProps, nextProps: HeadlinesProps) => {
 		// Complicated memo function is because we don't want the throttle timer to start when doing a render where nothing changed, and we can't maintain referential equality of props.events because it is passed between the UI and worker.
 		if (
 			prevProps.season !== nextProps.season ||

@@ -22,7 +22,6 @@ declare global {
 		heartbeatID: string;
 		mobile: boolean;
 		releaseStage: string;
-		_qevents: any;
 		themeCSSLink: HTMLLinkElement;
 		useSharedWorker: boolean;
 		withGoodUI: () => void;
@@ -114,6 +113,7 @@ export type AllStars = {
 	// After game is complete
 	gid?: number;
 	score?: [number, number];
+	sPts?: [number, number]; // Only if there was a shootout
 	overtimes?: number;
 	mvp?: {
 		pid: number;
@@ -252,11 +252,8 @@ export type TradeEventTeams = {
 	assets: TradeEventAsset[];
 }[];
 
-export type DiscriminateUnion<
-	T,
-	K extends keyof T,
-	V extends T[K],
-> = T extends Record<K, V> ? T : never;
+export type DiscriminateUnion<T, K extends keyof T, V extends T[K]> =
+	T extends Record<K, V> ? T : never;
 
 export type EventBBGMWithoutKey =
 	| {
@@ -318,6 +315,12 @@ type GameTeam = {
 		lost: number;
 	};
 
+	// This stat is guaranteed to be here in all sports. Others maybe not
+	pts: number;
+
+	// Defined only if it's a shootout
+	sPts?: number;
+
 	// For stats
 	[key: string]: any;
 };
@@ -331,6 +334,7 @@ export type Game = {
 	lost: {
 		tid: number;
 		pts: number;
+		sPts?: number;
 	};
 	numGamesToWinSeries?: number;
 	numPeriods?: number; // Optional only for legacy, otherwise it's the number of periods in the game, defined at the start
@@ -343,6 +347,7 @@ export type Game = {
 	won: {
 		tid: number;
 		pts: number;
+		sPts?: number;
 	};
 };
 
@@ -550,7 +555,8 @@ export type GameAttributesLeague = {
 	luxuryTax: number;
 	maxContract: number;
 	maxContractLength: number;
-	maxOvertimes: number | null; // null means infinite overtimes (no ties)
+	maxOvertimes: number | null; // null means infinite overtimes (no ties/shootouts)
+	maxOvertimesPlayoffs: number | null; // null means infinite overtimes (no shootouts)
 	maxRosterSize: number;
 	minContract: number;
 	minContractLength: number;
@@ -577,6 +583,8 @@ export type GameAttributesLeague = {
 	playIn: boolean;
 	playerMoodTraits: boolean;
 	pointsFormula: string;
+	shootoutRounds: number;
+	shootoutRoundsPlayoffs: number;
 	spectator: boolean;
 	otl: boolean;
 	otherTeamsWantToHire: boolean;
@@ -712,6 +720,7 @@ export type GameAttributesLeagueWithHistory = Omit<
 	| "otl"
 	| "playoffsNumTeamsDiv"
 	| "pointsFormula"
+	| "shootoutRounds"
 	| "tiebreakers"
 	| "userTid"
 > & {
@@ -731,6 +740,9 @@ export type GameAttributesLeagueWithHistory = Omit<
 	>;
 	pointsFormula: GameAttributeWithHistory<
 		GameAttributesLeague["pointsFormula"]
+	>;
+	shootoutRounds: GameAttributeWithHistory<
+		GameAttributesLeague["shootoutRounds"]
 	>;
 	tiebreakers: GameAttributeWithHistory<GameAttributesLeague["tiebreakers"]>;
 	userTid: GameAttributeWithHistory<GameAttributesLeague["userTid"]>;
@@ -963,6 +975,7 @@ export type LocalStateUI = {
 			{
 				ovr?: number;
 				pts?: number;
+				sPts?: number;
 				tid: number;
 				playoffs?: {
 					seed: number;
@@ -973,6 +986,7 @@ export type LocalStateUI = {
 			{
 				ovr?: number;
 				pts?: number;
+				sPts?: number;
 				tid: number;
 				playoffs?: {
 					seed: number;
@@ -1078,7 +1092,7 @@ export type PlayerFeatWithoutKey = {
 	playoffs: boolean;
 	gid: number;
 	stats: any;
-	won: boolean;
+	result: "W" | "L" | "T";
 	score: string;
 	overtimes: number;
 	numPeriods: number;
@@ -1371,7 +1385,6 @@ export type PlayoffSeriesTeam = {
 	imgURL?: string;
 	imgURLSmall?: string;
 	pendingPlayIn?: true;
-	pts?: number; // undefined means game hasn't happened yet
 	region?: string;
 	regularSeason?: {
 		won: number;
@@ -1382,6 +1395,10 @@ export type PlayoffSeriesTeam = {
 	seed: number;
 	tid: number;
 	won: number;
+
+	// pts and sPts are basically only used when there is one game in the series, but they're tracked as the sum of all games for some reason. Beside the one game use case, pts is used in a couple places to identify if a series has started or not. Might be good to improve that some day.
+	pts?: number; // undefined means game hasn't happened yet
+	sPts?: number; // undefined means game hasn't happened yet or there was no shootout
 };
 
 type PlayInMatchup = {
@@ -1590,14 +1607,14 @@ export type TeamFiltered<
 				seasonAttrs: Season extends number
 					? Pick<TeamSeasonPlus, SeasonAttrs[number]>
 					: Pick<TeamSeasonPlus, SeasonAttrs[number]>[];
-		  }
+			}
 		: Record<string, unknown>) &
 	(StatAttrs extends Readonly<TeamStatAttr[]>
 		? {
 				stats: Season extends number
 					? Pick<TeamStatsPlus, StatAttrs[number]> & { playoffs: boolean }
 					: (Pick<TeamStatsPlus, StatAttrs[number]> & { playoffs: boolean })[];
-		  }
+			}
 		: Record<string, unknown>);
 
 export type TeamBasic = {
@@ -1773,6 +1790,7 @@ export type UpdateEvents = (
 	| "options"
 	| "playerMovement"
 	| "playoffs"
+	| "savedTrades"
 	| "scheduledEvents"
 	| "retiredJerseys"
 	| "team"
@@ -1807,6 +1825,7 @@ export type GetLeagueOptionsReal = {
 	randomDebutsKeepCurrent: boolean;
 	realDraftRatings: "draft" | "rookie";
 	realStats: "none" | "lastSeason" | "allActive" | "allActiveHOF" | "all";
+	includePlayers: boolean;
 
 	// For exhibition game only
 	includeSeasonInfo?: boolean;
@@ -1880,4 +1899,9 @@ export type SeasonLeaders = {
 
 	// Optional because we can't compute this for real players leagues without scanning the whole history (slow, tedious) and probably nobody cares
 	ratingsFuzz?: Record<string, unknown>;
+};
+
+export type SavedTrade = {
+	hash: string;
+	tid: number;
 };

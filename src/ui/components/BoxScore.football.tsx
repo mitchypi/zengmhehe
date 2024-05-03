@@ -44,6 +44,7 @@ type BoxScore = {
 	teams: [Team, Team];
 	numPeriods?: number;
 	exhibition?: boolean;
+	shootout?: boolean;
 };
 
 export const StatsHeader = ({
@@ -225,20 +226,18 @@ const StatsTable = ({
 };
 
 // Condenses TD + XP/2P into one event rather than two, and normalizes scoring summary events into consistent format (old style format had the text in it already, new one is just raw metadata from game sim)
-const processEvents = (
-	events: PlayByPlayEventScore[],
-	numPeriods: number,
-	liveGameSim: boolean,
-) => {
+const processEvents = (events: PlayByPlayEventScore[], numPeriods: number) => {
 	const processedEvents: {
 		quarter: string;
+		noPoints: boolean;
 		score: [number, number];
 		scoreType: string | null;
 		t: 0 | 1;
 		text: ReactNode;
 		time: string;
 	}[] = [];
-	const score = [0, 0] as [number, number];
+	let score: [number, number] = [0, 0];
+	let shootout = false;
 
 	for (const event of events) {
 		let text: ReactNode | undefined;
@@ -257,19 +256,24 @@ const processEvents = (
 			continue;
 		}
 
-		// gameLog.ts swaps these, but liveGame.ts doesn't (because they come from the raw events in FBGM, but not in the other games - ugh)
-		const actualT = liveGameSim ? (event.t === 0 ? 1 : 0) : event.t;
-		const otherT = actualT === 0 ? 1 : 0;
+		if (!shootout && event.type === "shootoutShot") {
+			shootout = true;
+			score = [0, 0];
+		}
+
+		const otherT = event.t === 0 ? 1 : 0;
 
 		const scoreInfo = isOldFormat
 			? getScoreInfoOld(oldEvent.text)
 			: getScoreInfo(event);
 		if (scoreInfo) {
+			const ptsKey = shootout ? "sPts" : "points";
+			const pts = scoreInfo[ptsKey] ?? 0;
 			if (scoreInfo.type === "SF") {
 				// Safety is recorded as part of a play by the team with the ball, so for scoring purposes we need to swap the teams here and below
-				score[otherT] += scoreInfo.points;
+				score[otherT] += pts;
 			} else {
-				score[actualT] += scoreInfo.points;
+				score[event.t] += pts;
 			}
 
 			const prevEvent: any = processedEvents.at(-1);
@@ -277,7 +281,7 @@ const processEvents = (
 			if (
 				prevEvent &&
 				(scoreInfo.type === "XP" ||
-					(scoreInfo.type === "2P" && actualT === prevEvent.t))
+					(scoreInfo.type === "2P" && event.t === prevEvent.t))
 			) {
 				prevEvent.score = score.slice();
 				prevEvent.text = (
@@ -287,12 +291,13 @@ const processEvents = (
 				);
 			} else {
 				processedEvents.push({
-					t: scoreInfo.type === "SF" ? otherT : actualT, // See comment above about safety teams
+					t: scoreInfo.type === "SF" ? otherT : event.t, // See comment above about safety teams
 					quarter: isOldFormat
 						? oldEvent.quarter
 						: event.quarter <= numPeriods
 							? `Q${event.quarter}`
 							: `OT${event.quarter - numPeriods}`,
+					noPoints: pts === 0,
 					time: isOldFormat ? oldEvent.time : formatClock(event.clock),
 					text,
 					score: helpers.deepCopy(score),
@@ -312,19 +317,17 @@ const getCount = (events: PlayByPlayEventScore[]) => {
 const ScoringSummary = memo(
 	({
 		events,
-		liveGameSim,
 		numPeriods,
 		teams,
 	}: {
 		count: number;
 		events: PlayByPlayEventScore[];
-		liveGameSim: boolean;
 		numPeriods: number;
 		teams: [Team, Team];
 	}) => {
 		let prevQuarter: string;
 
-		const processedEvents = processEvents(events, numPeriods, liveGameSim);
+		const processedEvents = processEvents(events, numPeriods);
 
 		if (processedEvents.length === 0) {
 			return <p>None</p>;
@@ -334,26 +337,31 @@ const ScoringSummary = memo(
 			<table className="table table-sm border-bottom">
 				<tbody>
 					{processedEvents.map((event, i) => {
-						let quarterText = "???";
-						if (event.quarter.startsWith("OT")) {
-							const overtimes = parseInt(event.quarter.replace("OT", ""));
-							if (overtimes > 1) {
-								quarterText = `${helpers.ordinal(overtimes)} overtime`;
-							} else {
-								quarterText = "Overtime";
-							}
-						} else {
-							const quarter = parseInt(event.quarter.replace("Q", ""));
-							if (!Number.isNaN(quarter)) {
-								quarterText = `${helpers.ordinal(quarter)} ${getPeriodName(
-									numPeriods,
-								)}`;
-							}
-						}
-
 						let quarterHeader: ReactNode = null;
-						if (event.quarter !== prevQuarter) {
-							prevQuarter = event.quarter;
+						const currentQuarter =
+							event.scoreType === "SH" ? "SH" : event.quarter;
+						if (currentQuarter !== prevQuarter) {
+							prevQuarter = currentQuarter;
+
+							let quarterText = "???";
+							if (currentQuarter.startsWith("OT")) {
+								const overtimes = parseInt(currentQuarter.replace("OT", ""));
+								if (overtimes > 1) {
+									quarterText = `${helpers.ordinal(overtimes)} overtime`;
+								} else {
+									quarterText = "Overtime";
+								}
+							} else if (currentQuarter === "SH") {
+								quarterText = "Shootout";
+							} else {
+								const quarter = parseInt(currentQuarter.replace("Q", ""));
+								if (!Number.isNaN(quarter)) {
+									quarterText = `${helpers.ordinal(quarter)} ${getPeriodName(
+										numPeriods,
+									)}`;
+								}
+							}
+
 							quarterHeader = (
 								<tr>
 									<td className="text-body-secondary" colSpan={5}>
@@ -368,25 +376,28 @@ const ScoringSummary = memo(
 								{quarterHeader}
 								<tr>
 									<td>{teams[event.t].abbrev}</td>
-									<td>{event.scoreType}</td>
+									<td>{event.scoreType === "SH" ? "FG" : event.scoreType}</td>
 									<td>
-										{event.t === 0 ? (
-											<>
-												<b>{event.score[0]}</b>-
-												<span className="text-body-secondary">
-													{event.score[1]}
-												</span>
-											</>
-										) : (
-											<>
-												<span className="text-body-secondary">
-													{event.score[0]}
-												</span>
-												-<b>{event.score[1]}</b>
-											</>
-										)}
+										{event.score.map((pts, i) => {
+											return (
+												<Fragment key={i}>
+													<span
+														className={
+															!event.noPoints && event.t === i
+																? "fw-bold"
+																: event.noPoints && event.t === i
+																	? "text-danger"
+																	: "text-body-secondary"
+														}
+													>
+														{pts}
+													</span>
+													{i === 0 ? "-" : null}
+												</Fragment>
+											);
+										})}
 									</td>
-									<td>{event.time}</td>
+									<td>{currentQuarter !== "SH" ? event.time : null}</td>
 									<td style={{ whiteSpace: "normal" }}>{event.text}</td>
 								</tr>
 							</Fragment>
@@ -533,9 +544,10 @@ const PlayBar = forwardRef<
 	) => {
 		const goalToGo = play.toGo + play.scrimmage >= 100;
 		const TAG_WIDTH = goalToGo ? 75 : 60;
-		const SCORE_TAG_WIDTH = 30;
+		let SCORE_TAG_WIDTH = 30;
 
-		const negative = play.yards < 0;
+		const negative =
+			play.yards < 0 || (play.scoreInfo?.type === "SH" && play.scrimmage < 50);
 
 		const barGoingLeft = driveDirection === negative;
 
@@ -543,10 +555,15 @@ const PlayBar = forwardRef<
 
 		let score: string | undefined;
 		if (play.scoreInfo?.type) {
-			score =
-				play.scoreInfo.type === "FG" && play.scoreInfo.points === 0
-					? "Missed FG"
-					: play.scoreInfo.type;
+			if (
+				(play.scoreInfo.type === "FG" && play.scoreInfo.points === 0) ||
+				(play.scoreInfo.type === "SH" && play.scoreInfo.sPts === undefined)
+			) {
+				score = "Missed FG";
+				SCORE_TAG_WIDTH = 75;
+			} else {
+				score = play.scoreInfo.type === "SH" ? "FG" : play.scoreInfo.type;
+			}
 		}
 
 		const yardLinePercent = yardLineToPercent(play.scrimmage);
@@ -807,6 +824,8 @@ const FieldAndDrive = ({
 			<div className="d-flex mt-1">
 				{sportState.newPeriodText ? (
 					sportState.newPeriodText
+				) : boxScore.shootout ? (
+					"Shootout"
 				) : (
 					<>
 						{sportState.awaitingAfterTouchdown
@@ -848,7 +867,6 @@ const BoxScore = ({
 				key={boxScore.gid}
 				count={getCount(boxScore.scoringSummary)}
 				events={boxScore.scoringSummary}
-				liveGameSim={liveGameSim}
 				numPeriods={boxScore.numPeriods ?? 4}
 				teams={boxScore.teams}
 			/>

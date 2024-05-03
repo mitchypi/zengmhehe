@@ -1981,12 +1981,6 @@ const sportSpecificCols = bySport<{
 			sortType: "number",
 			title: "Y/A",
 		},
-		"stat:recYdsPerAtt": {
-			desc: "Yards Per Catch",
-			sortSequence: ["desc", "asc"],
-			sortType: "number",
-			title: "Y/A",
-		},
 		"stat:fg": {
 			desc: "Field Goals Made",
 			sortSequence: ["desc", "asc"],
@@ -2447,6 +2441,12 @@ const sportSpecificCols = bySport<{
 			sortType: "number",
 			title: "+/-",
 		},
+		"stat:shft": {
+			desc: "Shifts",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "SHFT",
+		},
 		"stat:pim": {
 			desc: "Penalty Minutes",
 			sortSequence: ["desc", "asc"],
@@ -2851,6 +2851,9 @@ const cols: {
 		sortType: "number",
 	},
 	College: {},
+	Compare: {
+		sortSequence: [],
+	},
 	Conference: {},
 	Contract: {
 		sortSequence: ["desc", "asc"],

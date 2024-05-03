@@ -12,7 +12,7 @@ const ACCOUNT_API_URL =
 				basketball: "https://account.basketball-gm.com",
 				football: "https://account.football-gm.com",
 				default: "https://account.zengm.com",
-		  });
+			});
 
 const DIFFICULTY = {
 	Easy: -0.25,
@@ -28,7 +28,7 @@ const DRAFT_BY_TEAM_OVR = bySport({
 	hockey: true,
 });
 
-const LEAGUE_DATABASE_VERSION = 58;
+const LEAGUE_DATABASE_VERSION = 60;
 
 const NO_LOTTERY_DRAFT_TYPES: DraftType[] = [
 	"freeAgents",
@@ -423,6 +423,9 @@ const DEFAULT_PHASE_CHANGE_REDIRECTS = [1, 3, 4, 5, 7, 8] as Phase[];
 
 const EXHIBITION_GAME_SETTINGS = [
 	"maxOvertimes",
+	"shootoutRounds",
+	"maxOvertimesPlayoffs",
+	"shootoutRoundsPlayoffs",
 	"dh",
 	"numPlayersOnCourt",
 	"foulsNeededToFoulOut",
@@ -499,6 +502,15 @@ export const DEFAULT_TEAM_COLORS: [string, string, string] = [
 	"#cccccc",
 	"#ffffff",
 ];
+
+export const STARTING_NUM_TIMEOUTS = bySport({
+	baseball: undefined,
+	football: 3,
+	hockey: undefined,
+
+	// Should actually be 7, but since timeouts are only used at the end of the game currently, it's silly to have those extra 5 timeouts lying around all game
+	basketball: 2,
+});
 
 export {
 	AD_DIVS,

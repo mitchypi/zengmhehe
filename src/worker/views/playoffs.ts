@@ -15,6 +15,7 @@ type SeriesTeam = {
 	imgURLSmall?: string;
 	pendingPlayIn?: true;
 	pts?: number;
+	sPts?: number;
 	region: string;
 	regularSeason: {
 		won: number;

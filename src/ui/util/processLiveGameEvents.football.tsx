@@ -1,5 +1,5 @@
 import { getPeriodName } from "../../common";
-import { isScoringPlay } from "../../common/isScoringPlay.football";
+import { formatScoringSummaryEvent } from "../../common/formatScoringSummaryEvent.football";
 import { helpers, local } from ".";
 import type { PlayByPlayEvent } from "../../worker/core/GameSim.football/PlayByPlayLogger";
 import type { ReactNode } from "react";
@@ -18,6 +18,7 @@ let playersByPid:
 export type SportState = {
 	awaitingAfterTouchdown: boolean;
 	awaitingKickoff: boolean;
+	awaitingShootout: boolean;
 	t: 0 | 1;
 	scrimmage: number;
 	toGo: number;
@@ -46,6 +47,7 @@ export type SportState = {
 export const DEFAULT_SPORT_STATE: SportState = {
 	awaitingAfterTouchdown: false,
 	awaitingKickoff: true,
+	awaitingShootout: false,
 	t: 0,
 	scrimmage: 0,
 	toGo: 0,
@@ -69,9 +71,10 @@ export const scrimmageToFieldPos = (
 };
 
 export const getScoreInfo = (event: PlayByPlayEvent) => {
-	let type: "XP" | "FG" | "TD" | "2P" | "SF" | undefined;
+	let type: "XP" | "FG" | "TD" | "2P" | "SF" | "SH" | undefined;
 	let long: string | undefined;
 	let points = 0;
+	let sPts = 0;
 
 	const eAny = event as any;
 
@@ -86,6 +89,12 @@ export const getScoreInfo = (event: PlayByPlayEvent) => {
 		long = "Field goal";
 		if (event.made) {
 			points = 3;
+		}
+	} else if (event.type === "shootoutShot") {
+		type = "SH";
+		long = "Shootout";
+		if (event.made) {
+			sPts = 1;
 		}
 	} else if (eAny.td) {
 		if (eAny.twoPointConversionTeam !== undefined) {
@@ -109,11 +118,20 @@ export const getScoreInfo = (event: PlayByPlayEvent) => {
 	}
 
 	if (type !== undefined && long !== undefined) {
-		return {
+		const scoreInfo = {
 			type,
 			long,
 			points,
+			sPts: undefined as undefined | number,
 		};
+		if (sPts > 0) {
+			return {
+				...scoreInfo,
+				sPts,
+			};
+		}
+
+		return scoreInfo;
 	}
 };
 
@@ -152,6 +170,7 @@ export const getScoreInfoOld = (text: string) => {
 			type,
 			long: "",
 			points,
+			sPts: undefined as undefined | number,
 		};
 	}
 };
@@ -233,8 +252,8 @@ export const getText = (event: PlayByPlayEvent, numPeriods: number) => {
 			event.touchback
 				? " for a touchback"
 				: event.yds < 0
-				  ? " into the end zone"
-				  : ` to the ${event.yds} yard line`
+					? " into the end zone"
+					: ` to the ${event.yds} yard line`
 		}`;
 	} else if (event.type === "kickoffReturn") {
 		text = `${event.names[0]} returned the kickoff ${event.yds} yards${
@@ -248,15 +267,15 @@ export const getText = (event: PlayByPlayEvent, numPeriods: number) => {
 				? "the kicking team!"
 				: `the receiving team${
 						event.td ? " and returned for a touchdown!" : ""
-				  }`
+					}`
 		}`;
 	} else if (event.type === "punt") {
 		text = `${event.names[0]} punted ${event.yds} yards${
 			event.touchback
 				? " for a touchback"
 				: event.yds < 0
-				  ? " into the end zone"
-				  : ""
+					? " into the end zone"
+					: ""
 		}`;
 	} else if (event.type === "puntReturn") {
 		text = `${event.names[0]} returned the punt ${event.yds} yards${
@@ -283,7 +302,7 @@ export const getText = (event: PlayByPlayEvent, numPeriods: number) => {
 					) : (
 						""
 					)}
-					${event.names[0]} recovered the fumble in the endzone, resulting in a{" "}
+					{event.names[0]} recovered the fumble in the endzone, resulting in a{" "}
 					{event.safety ? "safety!" : "touchback"}
 				</>
 			);
@@ -296,7 +315,7 @@ export const getText = (event: PlayByPlayEvent, numPeriods: number) => {
 						? ` in the endzone for ${touchdownText}!`
 						: ` and returned it ${event.yds} yards${
 								event.td ? ` for ${touchdownText}!` : ""
-						  }`}
+							}`}
 				</>
 			);
 		} else {
@@ -373,8 +392,8 @@ export const getText = (event: PlayByPlayEvent, numPeriods: number) => {
 			const spotFoulText = event.tackOn
 				? " from the end of the play"
 				: event.spotFoul
-				  ? " from the spot of the foul"
-				  : "";
+					? " from the spot of the foul"
+					: "";
 			const automaticFirstDownText = event.automaticFirstDown
 				? " and an automatic first down"
 				: "";
@@ -436,6 +455,14 @@ export const getText = (event: PlayByPlayEvent, numPeriods: number) => {
 		text = "Two-point conversion failed";
 	} else if (event.type === "turnoverOnDowns") {
 		text = <span className="text-danger">Turnover on downs</span>;
+	} else if (event.type === "shootoutStart") {
+		text = `The game will now be decided by a field goal shootout with ${event.rounds} rounds!`;
+	} else if (event.type === "shootoutShot") {
+		text = `Kick ${event.att}: ${event.names[0]} ${event.made ? "made" : "missed"} a ${
+			event.yds
+		} yard field goal`;
+	} else if (event.type === "shootoutTie") {
+		text = `The shootout is tied! Teams will alternate kicks until there is a winner`;
 	} else {
 		throw new Error(`No text for "${event.type}"`);
 	}
@@ -457,7 +484,11 @@ const processLiveGameEvents = ({
 	quarters: string[];
 	sportState: SportState;
 }) => {
-	if (!playersByPid || boxScore.gid !== playersByPidGid) {
+	if (
+		!playersByPid ||
+		boxScore.gid !== playersByPidGid ||
+		events[0]?.type === "init"
+	) {
 		playersByPidGid = boxScore.gid;
 		playersByPid = {};
 		for (const t of boxScore.teams) {
@@ -484,7 +515,12 @@ const processLiveGameEvents = ({
 		const actualT = eAny.t === 0 ? 1 : eAny.t === 1 ? 0 : undefined;
 		const otherT = actualT === 0 ? 1 : 0;
 
-		const scoringSummary = isScoringPlay(e);
+		const scoringSummaryEvent = formatScoringSummaryEvent(e, quarters.length);
+		if (scoringSummaryEvent) {
+			// Swap rather than using actualT in case it's a score for the other team
+			(scoringSummaryEvent as any).t =
+				(scoringSummaryEvent as any).t === 0 ? 1 : 0;
+		}
 
 		let quarterText;
 		if (quarters.length === 0) {
@@ -504,9 +540,9 @@ const processLiveGameEvents = ({
 			if (quarter > boxScore.numPeriods) {
 				overtimes += 1;
 				if (overtimes === 1) {
-					boxScore.overtime = " (OT)";
+					boxScore.overtime = "(OT)";
 				} else if (overtimes > 1) {
-					boxScore.overtime = ` (${overtimes}OT)`;
+					boxScore.overtime = `(${overtimes}OT)`;
 				}
 				boxScore.quarter = `${helpers.ordinal(overtimes)} overtime`;
 				boxScore.quarterShort = overtimes === 1 ? "OT" : `${overtimes}OT`;
@@ -531,18 +567,21 @@ const processLiveGameEvents = ({
 			scrimmage,
 			intendedPossessionChange,
 			subPlay,
+			tOverride,
 		}: {
 			down: number;
 			toGo: number;
 			scrimmage: number;
 			intendedPossessionChange: boolean;
 			subPlay: boolean;
+			tOverride?: 0 | 1;
 		}) => {
-			if (actualT === undefined) {
+			const t = tOverride ?? actualT;
+			if (t === undefined) {
 				throw new Error("Should never happen");
 			}
 			sportState.plays.push({
-				t: actualT,
+				t,
 				down,
 				toGo,
 				scrimmage,
@@ -558,6 +597,30 @@ const processLiveGameEvents = ({
 				subPlay,
 			});
 		};
+
+		if (e.type === "shootoutStart") {
+			boxScore.shootout = true;
+			boxScore.teams[0].sPts = 0;
+			boxScore.teams[0].sAtt = 0;
+			boxScore.teams[1].sPts = 0;
+			boxScore.teams[1].sAtt = 0;
+
+			sportState.plays = [];
+			sportState.awaitingAfterTouchdown = false;
+			sportState.awaitingKickoff = false;
+			sportState.awaitingShootout = true;
+			sportState.scrimmage = 1;
+			sportState.toGo = 10;
+			sportState.t = 0;
+			addNewPlay({
+				down: 1,
+				toGo: 10,
+				scrimmage: 100 - 33,
+				intendedPossessionChange: false,
+				subPlay: false,
+				tOverride: 0,
+			});
+		}
 
 		// Update team with possession
 		if (
@@ -583,6 +646,21 @@ const processLiveGameEvents = ({
 				scrimmage,
 				intendedPossessionChange: false,
 				subPlay: true,
+			});
+		}
+
+		if (e.type === "shootoutShot") {
+			if (sportState.awaitingShootout) {
+				sportState.plays.pop();
+				sportState.awaitingShootout = false;
+			}
+
+			addNewPlay({
+				down: 1,
+				toGo: 10,
+				scrimmage: actualT === 1 ? 33 : 100 - 33,
+				intendedPossessionChange: false,
+				subPlay: false,
 			});
 		}
 
@@ -692,6 +770,10 @@ const processLiveGameEvents = ({
 				sportState.newPeriodText = text;
 				sportState.plays = [];
 			}
+		} else if (e.type === "timeouts") {
+			// Reversed for actualT
+			boxScore.teams[0].timeouts = e.timeouts[1];
+			boxScore.teams[1].timeouts = e.timeouts[0];
 		} else if (e.type !== "init") {
 			let play = sportState.plays.at(-1);
 			if (!play) {
@@ -717,7 +799,11 @@ const processLiveGameEvents = ({
 				boxScore.time = formatClock(e.clock);
 				stop = true;
 				t = actualT;
-				textOnly = e.type === "twoMinuteWarning" || e.type === "gameOver";
+				textOnly =
+					e.type === "twoMinuteWarning" ||
+					e.type === "gameOver" ||
+					e.type === "shootoutStart" ||
+					e.type === "shootoutTie";
 
 				play.texts.push(text);
 			}
@@ -880,9 +966,9 @@ const processLiveGameEvents = ({
 			}
 
 			// Extra fieldGoal check is to include missed field goals
-			if (scoringSummary || (e as any).type === "fieldGoal") {
+			if (scoringSummaryEvent) {
 				const scoreInfo = getScoreInfo(e);
-				if (scoreInfo && (scoreInfo.points > 0 || scoreInfo.type === "FG")) {
+				if (scoreInfo) {
 					play.scoreInfo = scoreInfo;
 				}
 			}
@@ -891,6 +977,8 @@ const processLiveGameEvents = ({
 				play.tagOverride = "XPA";
 			} else if (e.type === "twoPointConversion") {
 				play.tagOverride = "2PA";
+			} else if (e.type === "shootoutShot") {
+				play.tagOverride = "FGA";
 			}
 		}
 
@@ -920,11 +1008,8 @@ const processLiveGameEvents = ({
 			}
 		}
 
-		if (scoringSummary) {
-			boxScore.scoringSummary.push({
-				...e,
-				quarter: quarters.length,
-			});
+		if (scoringSummaryEvent) {
+			boxScore.scoringSummary.push(scoringSummaryEvent);
 		}
 	}
 

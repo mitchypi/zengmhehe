@@ -65,7 +65,7 @@ const buildCSS = async (watch /*: boolean*/ = false) => {
 						/^dashboard-top-link-other/,
 					],
 				},
-		  });
+			});
 
 	for (let i = 0; i < filenames.length; i++) {
 		const filename = filenames[i];
@@ -88,7 +88,7 @@ const buildCSS = async (watch /*: boolean*/ = false) => {
 				minify: true,
 				sourceMap: false,
 				targets: lightningCSS.browserslistToTargets(
-					browserslist("Chrome >= 67, Firefox >= 78, Safari >= 12"),
+					browserslist("Chrome >= 75, Firefox >= 78, Safari >= 12.1"),
 				),
 			});
 
@@ -321,6 +321,9 @@ const setTimestamps = (rev /*: string*/, watch /*: boolean*/ = false) => {
 	// Quantcast Choice. Consent Manager Tag v2.0 (for TCF 2.0)
 	const bannerAdsCode = `<script type="text/javascript" async=true>
 (function() {
+  if (!window.enableLogging) {
+	return;
+  }
   var host = '${bySport({
 		basketball: "basketball-gm.com",
 		football: "football-gm.com",

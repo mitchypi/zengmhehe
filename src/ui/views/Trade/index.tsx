@@ -1,13 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { PHASE } from "../../../common";
 import useTitleBar from "../../hooks/useTitleBar";
-import { helpers, toWorker, useLocal, useLocalPartial } from "../../util";
+import { helpers, toWorker, useLocal } from "../../util";
 import AssetList from "./AssetList";
 import Buttons from "./Buttons";
 import type { TradeClearType } from "./Buttons";
 import Summary from "./Summary";
 import type { TradeTeams, View } from "../../../common/types";
 import classNames from "classnames";
+import { SaveTrade } from "../../components";
 
 export type HandleToggle = (
 	userOrOther: "other" | "user",
@@ -189,6 +190,8 @@ const Trade = (props: View<"trade">) => {
 			undefined,
 		);
 
+		console.log("changed", changed);
+
 		if (!changed) {
 			newPrevTeams = undefined;
 		}
@@ -251,7 +254,6 @@ const Trade = (props: View<"trade">) => {
 		salaryCap,
 		salaryCapType,
 		summary,
-		showResigningMsg,
 		stats,
 		strategy,
 		teams,
@@ -260,6 +262,11 @@ const Trade = (props: View<"trade">) => {
 		userRoster,
 		userTeamName,
 		won,
+		userDpids,
+		userPids,
+		otherDpids,
+		otherPids,
+		userTid,
 	} = props;
 
 	useTitleBar({
@@ -302,8 +309,6 @@ const Trade = (props: View<"trade">) => {
 		};
 	}, [updateSummaryHeight]);
 
-	const { gender } = useLocalPartial(["gender"]);
-
 	const noTradingAllowed =
 		(phase >= PHASE.AFTER_TRADE_DEADLINE && phase <= PHASE.PLAYOFFS) ||
 		phase === PHASE.FANTASY_DRAFT ||
@@ -331,20 +336,7 @@ const Trade = (props: View<"trade">) => {
 		<>
 			<div className="row">
 				<div className="col-md-9">
-					{showResigningMsg ? (
-						<p>
-							You can't trade players whose contracts expired this season, but
-							their old contracts still count against team salary caps until
-							they are either re-signed or become free agents.
-						</p>
-					) : null}
-
-					<p>
-						If a player has been signed within the past 14 days,{" "}
-						{helpers.pronoun(gender, "he")} is not allowed to be traded.
-					</p>
-
-					<div className="d-flex mb-2">
+					<div className="d-flex mb-2 align-items-center">
 						<div className="btn-group">
 							<button
 								className="btn btn-light-bordered btn-xs"
@@ -368,7 +360,7 @@ const Trade = (props: View<"trade">) => {
 							</button>
 						</div>
 						<select
-							className="float-start form-select select-team mx-2"
+							className="float-start form-select select-team mx-2 flex-shrink-1"
 							value={otherTid}
 							onChange={event => {
 								handleChangeTeam(parseInt(event.currentTarget.value));
@@ -380,15 +372,26 @@ const Trade = (props: View<"trade">) => {
 								</option>
 							))}
 						</select>
-						<div
-							style={{
-								paddingTop: 7,
-							}}
-						>
+						<div className="text-nowrap me-2">
 							{won}-{lost}
 							{otl > 0 ? <>-{otl}</> : null}
 							{tied > 0 ? <>-{tied}</> : null}, {strategy}
 						</div>
+						<SaveTrade
+							className="ms-auto"
+							tradeTeams={[
+								{
+									pids: userPids,
+									dpids: userDpids,
+									tid: userTid,
+								},
+								{
+									pids: otherPids,
+									dpids: otherDpids,
+									tid: otherTid,
+								},
+							]}
+						/>
 					</div>
 					<AssetList
 						challengeNoRatings={challengeNoRatings}

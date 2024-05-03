@@ -5,6 +5,7 @@ import type {
 	PlayByPlayEventScore,
 } from "../../worker/core/GameSim.hockey/PlayByPlayLogger";
 import type { PlayerInjury } from "../../common/types";
+import { formatScoringSummaryEvent } from "../../common/formatScoringSummaryEvent.hockey";
 
 let playersByPidGid: number | undefined;
 let playersByPid:
@@ -18,26 +19,6 @@ let playersByPid:
 			}
 	  >
 	| undefined;
-
-// For strings of a format like 1:23 (times), which is greater? 1 for first, -1 for second, 0 for tie
-const cmpTime = (t1: string, t2: string) => {
-	const [min1, sec1] = t1.split(":").map(x => parseInt(x));
-	const [min2, sec2] = t2.split(":").map(x => parseInt(x));
-
-	if (min1 > min2) {
-		return 1;
-	}
-	if (min1 < min2) {
-		return -1;
-	}
-	if (sec1 > sec2) {
-		return 1;
-	}
-	if (sec1 < sec2) {
-		return -1;
-	}
-	return 0;
-};
 
 // Convert clock in minutes to min:sec, like 1.5 -> 1:30
 export const formatClock = (clock: number) => {
@@ -79,112 +60,96 @@ const getText = (
 
 	if (event.type === "injury") {
 		text = `${event.names[0]} was injured!`;
-	}
-	if (event.type === "quarter") {
+	} else if (event.type === "quarter") {
 		text = `Start of ${helpers.ordinal(event.quarter)} ${getPeriodName(
 			boxScore.numPeriods,
 		)}`;
-	}
-	if (event.type === "overtime") {
+	} else if (event.type === "overtime") {
 		const overtimes = event.quarter - boxScore.numPeriods;
 		text = `Start of ${
 			overtimes === 1 ? "" : `${helpers.ordinal(overtimes)} `
 		} overtime`;
-	}
-	if (event.type === "gameOver") {
+	} else if (event.type === "gameOver") {
 		text = "End of game";
-	}
-	if (event.type === "hit") {
+	} else if (event.type === "hit") {
 		text = `${event.names[0]} hit ${event.names[1]}`;
-	}
-	if (event.type === "gv") {
+	} else if (event.type === "gv") {
 		text = `Giveaway by ${event.names[0]}`;
-	}
-	if (event.type === "tk") {
+	} else if (event.type === "tk") {
 		text = `Takeaway by ${event.names[0]}`;
-	}
-	if (event.type === "slapshot") {
+	} else if (event.type === "slapshot") {
 		text = `Slapshot from ${event.names[0]}`;
-	}
-	if (event.type === "wristshot") {
+	} else if (event.type === "wristshot") {
 		text = `Wristshot by ${event.names[0]}`;
-	}
-	if (event.type === "shot") {
+	} else if (event.type === "shot") {
 		text = `Shot by ${event.names[0]}`;
-	}
-	if (event.type === "reboundShot") {
+	} else if (event.type === "reboundShot") {
 		text = `Shot by ${event.names[0]} off the rebound`;
-	}
-	if (event.type === "deflection") {
+	} else if (event.type === "deflection") {
 		text = `Deflected by ${event.names[0]}`;
-	}
-	if (event.type === "block") {
+	} else if (event.type === "block") {
 		text = `Blocked by ${event.names[0]}`;
-	}
-	if (event.type === "miss") {
+	} else if (event.type === "miss") {
 		text = "Shot missed the goal";
-	}
-	if (event.type === "save") {
+	} else if (event.type === "save") {
 		text = `Saved by ${event.names[0]}`;
-	}
-	if (event.type === "save-freeze") {
+	} else if (event.type === "save-freeze") {
 		text = `Saved by ${event.names[0]}, and ${helpers.pronoun(
 			local.getState().gender,
 			"he",
 		)} freezes the puck`;
-	}
-	if (event.type === "faceoff") {
+	} else if (event.type === "faceoff") {
 		text = `${event.names[0]} wins the faceoff against ${event.names[1]}`;
-	}
-	if (event.type === "goal") {
+	} else if (event.type === "goal") {
 		// text empty because PlayByPlayEntry handles it
 		text = "";
 		if (event.names.length > 1) {
 			text += ` (assist: ${event.names.slice(1).join(", ")})`;
 		}
-	}
-	if (event.type === "offensiveLineChange") {
+	} else if (event.type === "offensiveLineChange") {
 		text = "Offensive line change";
-	}
-	if (event.type === "fullLineChange") {
+	} else if (event.type === "fullLineChange") {
 		text = "Full line change";
-	}
-	if (event.type === "defensiveLineChange") {
+	} else if (event.type === "defensiveLineChange") {
 		text = "Defensive line change";
-	}
-	if (event.type === "penalty") {
+	} else if (event.type === "penalty") {
 		const type =
 			event.penaltyType === "major"
 				? "Major"
 				: event.penaltyType === "minor"
-				  ? "Minor"
-				  : "Double minor";
+					? "Minor"
+					: "Double minor";
 		text = (
 			<span className="text-danger">
 				{type} penalty on {event.names[0]} for {event.penaltyName}
 			</span>
 		);
-	}
-	if (event.type === "penaltyOver") {
+	} else if (event.type === "penaltyOver") {
 		text = (
 			<span className="text-danger">
 				{event.names[0]} is released from the penalty box
 			</span>
 		);
-	}
-	if (event.type === "pullGoalie") {
+	} else if (event.type === "pullGoalie") {
 		text = (
 			<span className="text-danger">
 				Pulled goalie! {event.name} takes the ice
 			</span>
 		);
-	}
-	if (event.type === "noPullGoalie") {
+	} else if (event.type === "noPullGoalie") {
 		text = (
 			<span className="text-danger">
 				Goalie {event.name} comes back into the game
 			</span>
 		);
+	} else if (event.type === "shootoutStart") {
+		text = `The game will now be decided by a shootout with ${event.rounds} rounds!`;
+	} else if (event.type === "shootoutTeam") {
+		text = `${event.names[0]} takes the puck`;
+	} else if (event.type === "shootoutShot") {
+		text = event.made ? "" : `Saved by ${event.goalieName}`;
+	} else if (event.type === "shootoutTie") {
+		text = `The shootout is tied! Teams will alternate penalty shots until there is a winner`;
 	}
 
 	if (text === undefined) {
@@ -212,11 +177,16 @@ const processLiveGameEvents = ({
 		teams: any;
 		time: string;
 		scoringSummary: PlayByPlayEventScore[];
+		shootout?: boolean;
 	};
 	overtimes: number;
 	quarters: number[];
 }) => {
-	if (!playersByPid || boxScore.gid !== playersByPidGid) {
+	if (
+		!playersByPid ||
+		boxScore.gid !== playersByPidGid ||
+		events[0]?.type === "init"
+	) {
 		playersByPidGid = boxScore.gid;
 		playersByPid = {};
 		for (const t of boxScore.teams) {
@@ -229,7 +199,6 @@ const processLiveGameEvents = ({
 	let text;
 	let t: 0 | 1 | undefined;
 	let textOnly = false;
-	let prevGoal: PlayByPlayEvent | undefined;
 
 	while (!stop && events.length > 0) {
 		const e = events.shift();
@@ -251,9 +220,9 @@ const processLiveGameEvents = ({
 			if (quarter > boxScore.numPeriods) {
 				overtimes += 1;
 				if (overtimes === 1) {
-					boxScore.overtime = " (OT)";
+					boxScore.overtime = "(OT)";
 				} else if (overtimes > 1) {
-					boxScore.overtime = ` (${overtimes}OT)`;
+					boxScore.overtime = `(${overtimes}OT)`;
 				}
 				boxScore.quarter = `${helpers.ordinal(overtimes)} overtime`;
 				boxScore.quarterShort = overtimes === 1 ? "OT" : `${overtimes}OT`;
@@ -270,6 +239,14 @@ const processLiveGameEvents = ({
 			if (e.type !== "stat" && e.type !== "playersOnIce") {
 				boxScore.time = formatClock(e.clock);
 			}
+		}
+
+		if (e.type === "shootoutStart") {
+			boxScore.shootout = true;
+			boxScore.teams[0].sPts = 0;
+			boxScore.teams[0].sAtt = 0;
+			boxScore.teams[1].sPts = 0;
+			boxScore.teams[1].sAtt = 0;
 		}
 
 		if (e.type === "stat") {
@@ -309,49 +286,37 @@ const processLiveGameEvents = ({
 				p.inPenaltyBox = false;
 			}
 
-			if (e.type === "goal") {
-				prevGoal = e;
-			}
-
 			text = getText(e, boxScore);
 			t = actualT;
 			textOnly =
-				e.type === "gameOver" || e.type === "quarter" || e.type === "overtime";
+				e.type === "gameOver" ||
+				e.type === "quarter" ||
+				e.type === "overtime" ||
+				e.type === "shootoutStart" ||
+				e.type === "shootoutTie";
 			boxScore.time = formatClock(e.clock);
 
 			if (Object.hasOwn(newPossessionTypes, eAny.type)) {
 				boxScore.possession = newPossessionTypes[eAny.type]
 					? actualT
 					: actualT === 0
-					  ? 1
-					  : 0;
+						? 1
+						: 0;
 			}
 
 			stop = true;
 		}
-	}
 
-	//  Handle filtering of scoringSummary
-	if (boxScore.scoringSummary && boxScore.time !== undefined) {
-		for (const event of boxScore.scoringSummary) {
-			if (event.hide === false) {
-				// Already past, no need to check again
-				continue;
-			}
-
-			if (!quarters.includes(event.quarter)) {
-				// Future quarters
-				event.hide = true;
-			} else if (event.quarter !== quarters.at(-1)) {
-				// Past quarters
-				event.hide = false;
-			} else {
-				const cmp = cmpTime(formatClock(event.clock), boxScore.time);
-				const show =
-					cmp === 1 ||
-					(cmp === 0 && prevGoal && (prevGoal as any).clock === event.clock);
-				event.hide = !show;
-			}
+		//  Handle filtering of scoringSummary
+		const scoringSummaryEvent = formatScoringSummaryEvent(e);
+		if (scoringSummaryEvent) {
+			// Swap rather than using actualT in case it's a score for the other team
+			(scoringSummaryEvent as any).t =
+				(scoringSummaryEvent as any).t === 0 ? 1 : 0;
+			boxScore.scoringSummary = [
+				...boxScore.scoringSummary,
+				scoringSummaryEvent,
+			];
 		}
 	}
 

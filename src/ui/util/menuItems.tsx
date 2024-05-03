@@ -25,7 +25,7 @@ const depthChart: MenuItemLink[] =
 					path: ["depth"],
 					text: DEPTH_CHART_NAME,
 				},
-		  ]
+			]
 		: [];
 
 if (isSport("baseball")) {
@@ -110,7 +110,7 @@ const menuItems: (MenuItemLink | MenuItemHeader)[] = [
 					path: "/new_league",
 					text: "New League > Custom",
 				},
-		  ] as MenuItemLink[])
+			] as MenuItemLink[])
 		: ([
 				{
 					type: "link",
@@ -120,7 +120,7 @@ const menuItems: (MenuItemLink | MenuItemHeader)[] = [
 					path: "/new_league",
 					text: "New League",
 				},
-		  ] as MenuItemLink[])),
+			] as MenuItemLink[])),
 	{
 		type: "link",
 		active: pageID =>
@@ -387,6 +387,14 @@ const menuItems: (MenuItemLink | MenuItemHeader)[] = [
 			},
 			{
 				type: "link",
+				active: pageID => pageID === "savedTrades",
+				league: true,
+				commandPalette: true,
+				path: ["saved_trades"],
+				text: "Saved Trades",
+			},
+			{
+				type: "link",
 				active: pageID =>
 					typeof pageID === "string" && pageID.startsWith("draft"),
 				league: true,
@@ -425,6 +433,14 @@ const menuItems: (MenuItemLink | MenuItemHeader)[] = [
 				commandPaletteOnly: true,
 				path: ["draft_team_history"],
 				text: "Draft Team History",
+			},
+			{
+				type: "link",
+				active: pageID => pageID === "comparePlayers",
+				league: true,
+				commandPalette: true,
+				path: ["compare_players"],
+				text: "Compare Players",
 			},
 			{
 				type: "link",
@@ -840,7 +856,7 @@ const menuItems: (MenuItemLink | MenuItemHeader)[] = [
 							commandPaletteOnly: true,
 							path: ["frivolities", ...row.urlParts],
 							text: `${category} > ${row.name}`,
-						} as MenuItemLink),
+						}) as MenuItemLink,
 				),
 			)
 			.flat(),

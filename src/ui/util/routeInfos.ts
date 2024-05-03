@@ -48,6 +48,7 @@ const routeInfos = {
 	"/l/:lid/trade": "trade",
 	"/l/:lid/trading_block": "tradingBlock",
 	"/l/:lid/trade_proposals": "tradeProposals",
+	"/l/:lid/saved_trades": "savedTrades",
 	"/l/:lid/edit_awards": "editAwards",
 	"/l/:lid/edit_awards/:season": "editAwards",
 	"/l/:lid/draft": "draft",
@@ -202,6 +203,8 @@ const routeInfos = {
 	"/l/:lid/season_preview/:season": "seasonPreview",
 	"/l/:lid/auto_expand": "autoExpand",
 	"/l/:lid/auto_relocate": "autoRelocate",
+	"/l/:lid/compare_players": "comparePlayers",
+	"/l/:lid/compare_players/:info": "comparePlayers",
 };
 
 export default routeInfos;

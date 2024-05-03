@@ -1,16 +1,16 @@
-import { g, helpers, random } from "../../util";
-import { PHASE } from "../../../common";
+import { defaultGameAttributes, g, helpers, random } from "../../util";
+import { PHASE, STARTING_NUM_TIMEOUTS } from "../../../common";
 import jumpBallWinnerStartsThisPeriodWithPossession from "./jumpBallWinnerStartsThisPeriodWithPossession";
 import getInjuryRate from "./getInjuryRate";
 import type { GameAttributesLeague, PlayerInjury } from "../../../common/types";
 import GameSimBase from "../GameSimBase";
-import { range } from "../../../common/utils";
+import { maxBy, range } from "../../../common/utils";
 import PlayByPlayLogger from "./PlayByPlayLogger";
+import getWinner from "../../../common/getWinner";
 
 const SHOT_CLOCK = 24;
-const NUM_TIMEOUTS = 7;
-const NUM_TIMEOUTS_MAX_FINAL_PERIOD = 4;
-const NUM_TIMEOUTS_MAX_FINAL_PERIOD_LAST_3_MIN = 2;
+// const NUM_TIMEOUTS_MAX_FINAL_PERIOD = 4;
+// const NUM_TIMEOUTS_MAX_FINAL_PERIOD_LAST_3_MIN = 2;
 const NUM_TIMEOUTS_OVERTIME = 2;
 
 const TIMEOUTS_STOP_CLOCK = 2; // [minutes]
@@ -51,7 +51,9 @@ type Stat =
 	| "stl"
 	| "tov"
 	| "tp"
-	| "tpa";
+	| "tpa"
+	| "sAtt"
+	| "sPts";
 type PlayerNumOnCourt = number;
 type TeamNum = 0 | 1;
 type CompositeRating =
@@ -235,7 +237,7 @@ class GameSim extends GameSimBase {
 
 	gender: GameAttributesLeague["gender"];
 
-	timeouts: [number, number] = [NUM_TIMEOUTS, NUM_TIMEOUTS];
+	timeouts: [number, number] = [STARTING_NUM_TIMEOUTS!, STARTING_NUM_TIMEOUTS!];
 
 	isClockRunning = true;
 
@@ -406,11 +408,13 @@ class GameSim extends GameSimBase {
 			numOvertimes += 1;
 		}
 
+		this.checkGameWinner();
+
+		this.doShootout();
+
 		this.playByPlay.logEvent({
 			type: "gameOver",
 		});
-
-		this.checkGameWinner();
 
 		// Delete stuff that isn't needed before returning
 		for (const t of teamNums) {
@@ -449,8 +453,113 @@ class GameSim extends GameSimBase {
 		return out;
 	}
 
+	doShootoutShot(t: TeamNum, p: PlayerGameSim) {
+		// 20% to 80%
+		const probMake = p.compositeRating.shootingThreePointer * 0.6 + 0.2;
+
+		const made = Math.random() < probMake;
+
+		this.recordStat(t, undefined, "sAtt");
+		if (made) {
+			this.recordStat(t, undefined, "sPts");
+		}
+
+		this.playByPlay.logEvent({
+			type: "shootoutShot",
+			t: t,
+			pid: p.id,
+			made,
+		});
+	}
+
+	doShootout() {
+		if (
+			this.shootoutRounds <= 0 ||
+			this.team[0].stat.pts !== this.team[1].stat.pts
+		) {
+			return;
+		}
+
+		this.shootout = true;
+		this.t = 1; // So fast-forward to end of period stops before the shootout
+		this.team[0].stat.sPts = 0;
+		this.team[0].stat.sAtt = 0;
+		this.team[1].stat.sPts = 0;
+		this.team[1].stat.sAtt = 0;
+
+		this.playByPlay.logEvent({
+			type: "shootoutStart",
+			rounds: this.shootoutRounds,
+
+			// So fast-forward to end of period stops before the shootout
+			clock: this.t,
+		});
+
+		const shooters = teamNums.map(t => {
+			// Find best shooter - slight bias towards high usage players
+			return maxBy(
+				this.team[t].player,
+				p =>
+					p.compositeRating.shootingThreePointer +
+					0.2 * p.compositeRating.usage -
+					(p.injured ? 1000 : 0),
+			)!;
+		}) as [PlayerGameSim, PlayerGameSim];
+
+		const reversedTeamNums = [1, 0] as const;
+
+		for (const t of reversedTeamNums) {
+			const shooter = shooters[t];
+
+			this.playByPlay.logEvent({
+				type: "shootoutTeam",
+				t: t,
+				pid: shooter.id,
+			});
+
+			for (let i = 0; i < this.shootoutRounds; i++) {
+				if (
+					this.shouldEndShootoutEarly(t, i, [
+						this.team[0].stat.sPts,
+						this.team[1].stat.sPts,
+					])
+				) {
+					break;
+				}
+
+				this.doShootoutShot(t, shooter);
+			}
+		}
+
+		if (this.team[0].stat.sPts === this.team[1].stat.sPts) {
+			this.playByPlay.logEvent({
+				type: "shootoutTie",
+			});
+
+			while (this.team[0].stat.sPts === this.team[1].stat.sPts) {
+				for (const t of reversedTeamNums) {
+					this.doShootoutShot(t, shooters[t]);
+				}
+			}
+		}
+
+		// Log winner
+		const winner = this.team[0].stat.sPts > this.team[1].stat.sPts ? 0 : 1;
+		const loser = winner === 0 ? 1 : 0;
+		this.clutchPlays.push({
+			text: `<a href="${helpers.leagueUrl(["player", shooters[winner].id])}">${
+				shooters[winner].name
+			}</a> defeated <a href="${helpers.leagueUrl(["player", shooters[loser].id])}">${
+				shooters[loser].name
+			}</a> in a shootout`,
+			showNotification: this.team[winner].id === g.get("userTid"),
+			pids: [shooters[winner].id],
+			tids: [this.team[winner].id],
+		});
+	}
+
 	jumpBall() {
-		const jumpers = ([0, 1] as const).map(t => {
+		const jumpers = teamNums.map(t => {
 			const ratios = this.ratingArray("jumpBall", t);
 			const maxRatio = Math.max(...ratios);
 			let ind = ratios.findIndex(ratio => ratio === maxRatio);
@@ -501,17 +610,25 @@ class GameSim extends GameSimBase {
 		}
 	}
 
+	logTimeouts() {
+		this.playByPlay.logEvent({
+			type: "timeouts",
+			timeouts: [...this.timeouts],
+		});
+	}
+
 	// Set the number of timeouts for each team to maxTimeouts, unless it's already lower than that in which case do nothing
-	setMaxTimeouts(maxTimeouts: number) {
+	/*setMaxTimeouts(maxTimeouts: number) {
 		this.timeouts = this.timeouts.map(timeouts => {
 			return Math.min(timeouts, maxTimeouts);
 		}) as [number, number];
-	}
+		this.logTimeouts();
+	}*/
 
 	simRegulation() {
 		let period = 1;
 		const wonJump = this.jumpBall();
-		let doneSettingTimeoutsLastThreeMinutes = false;
+		// let doneSettingTimeoutsLastThreeMinutes = false;
 
 		while (!this.elamDone) {
 			if (period !== 1) {
@@ -521,9 +638,9 @@ class GameSim extends GameSimBase {
 			}
 
 			const finalPeriod = period === this.numPeriods;
-			if (finalPeriod) {
+			/*if (finalPeriod) {
 				this.setMaxTimeouts(NUM_TIMEOUTS_MAX_FINAL_PERIOD);
-			}
+			}*/
 
 			// Team assignments are the opposite of what you'd expect, cause in simPossession it swaps possession at top
 			if (
@@ -537,14 +654,14 @@ class GameSim extends GameSimBase {
 
 			this.checkElamEnding(); // Before loop, in case it's at 0
 			while (this.t > 0 && !this.elamDone) {
-				if (
+				/*if (
 					finalPeriod &&
 					!doneSettingTimeoutsLastThreeMinutes &&
 					this.t <= 3 * 60
 				) {
 					this.setMaxTimeouts(NUM_TIMEOUTS_MAX_FINAL_PERIOD_LAST_3_MIN);
 					doneSettingTimeoutsLastThreeMinutes = true;
-				}
+				}*/
 
 				this.simPossession();
 				this.checkElamEnding();
@@ -572,12 +689,15 @@ class GameSim extends GameSimBase {
 
 	simOvertime() {
 		// 5 minutes by default, but scales
-		this.t = Math.ceil(0.4 * g.get("quarterLength") * 60);
+		this.t = Math.ceil(
+			(g.get("quarterLength") * 60 * 5) / defaultGameAttributes.quarterLength,
+		);
 		if (this.t === 0) {
 			this.t = 5 * 60;
 		}
 
 		this.timeouts = [NUM_TIMEOUTS_OVERTIME, NUM_TIMEOUTS_OVERTIME];
+		this.logTimeouts();
 
 		this.lastScoringPlay = [];
 		this.overtimes += 1;
@@ -1484,6 +1604,7 @@ class GameSim extends GameSimBase {
 					if (takeTimeout) {
 						this.isClockRunning = false;
 						this.timeouts[this.o] -= 1;
+						this.logTimeouts();
 						this.playByPlay.logEvent({
 							type: "timeout",
 							clock: this.t,
@@ -2336,6 +2457,7 @@ class GameSim extends GameSimBase {
 		);
 	}
 
+	// This runs before an overtime period is played, so all these shots lead to another overtime period, not the end of the game
 	checkGameTyingShot() {
 		if (this.lastScoringPlay.length === 0 || this.elamActive) {
 			return;
@@ -2425,14 +2547,18 @@ class GameSim extends GameSimBase {
 		});
 	}
 
+	// This runs after the game ends (except shootout) so it could be a game-tying shot if the game will end in a tie or shootout
 	checkGameWinner() {
 		if (this.lastScoringPlay.length === 0) {
 			return;
 		}
 
-		const winner = this.team[0].stat.pts > this.team[1].stat.pts ? 0 : 1;
+		const winner = getWinner([this.team[0].stat, this.team[1].stat])!;
 		const loser = winner === 0 ? 1 : 0;
-		const finalMargin = this.team[winner].stat.pts - this.team[loser].stat.pts;
+		const finalMargin =
+			winner === -1
+				? 0
+				: this.team[winner].stat.pts - this.team[loser].stat.pts;
 		let margin = finalMargin;
 
 		// work backwards from last scoring plays, check if any resulted in a tie-break or lead change
@@ -2488,14 +2614,13 @@ class GameSim extends GameSimBase {
 				default:
 			}
 
-			margin -= play.team === winner ? pts : -pts;
+			margin -= winner === -1 || play.team === winner ? pts : -pts;
 
 			if (margin <= 0) {
 				const team = this.team[play.team];
 				const player = this.team[play.team].player[play.player];
 
-				const winningOrTying =
-					finalMargin === 0 ? "game-tying" : "game-winning";
+				const winningOrTying = winner === -1 ? "game-tying" : "game-winning";
 
 				let eventText = `<a href="${helpers.leagueUrl([
 					"player",
@@ -2511,6 +2636,10 @@ class GameSim extends GameSimBase {
 								? " with no time on the clock"
 								: " at the buzzer";
 					}
+				}
+
+				if (winner === -1 && this.shootoutRounds > 0) {
+					eventText += " to force a shootout";
 				}
 
 				this.clutchPlays.push({
@@ -2793,8 +2922,10 @@ class GameSim extends GameSimBase {
 	 * @param {string} s Key for the property of this.team[t].player[p].stat to increment.
 	 * @param {number} amt Amount to increment (default is 1).
 	 */
-	recordStat(t: TeamNum, p: number, s: Stat, amt: number = 1) {
-		this.team[t].player[p].stat[s] += amt;
+	recordStat(t: TeamNum, p: number | undefined, s: Stat, amt: number = 1) {
+		if (p !== undefined) {
+			this.team[t].player[p].stat[s] += amt;
+		}
 
 		if (s !== "courtTime" && s !== "benchTime" && s !== "energy") {
 			if (s !== "gs") {
@@ -2822,7 +2953,12 @@ class GameSim extends GameSimBase {
 			}
 
 			if (this.playByPlay !== undefined) {
-				this.playByPlay.logStat(t, this.team[t].player[p].id, s, amt);
+				this.playByPlay.logStat(
+					t,
+					p === undefined ? undefined : this.team[t].player[p].id,
+					s,
+					amt,
+				);
 			}
 		}
 	}

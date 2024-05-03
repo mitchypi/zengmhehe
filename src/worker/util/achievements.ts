@@ -183,7 +183,6 @@ const checkFoFoFo = async () => {
 	const playoffSeries = await idb.cache.playoffSeries.get(g.get("season"));
 
 	if (!playoffSeries || playoffSeries.series.length === 0) {
-		// Should only happen if playoffs are skipped
 		return false;
 	}
 
@@ -220,6 +219,58 @@ const checkFoFoFo = async () => {
 	return true;
 };
 
+const checkBrickWall = async (cutoff: number) => {
+	let count = 0;
+	const awards = await idb.cache.awards.get(g.get("season"));
+
+	if (awards && awards.allDefensive && awards.allDefensive[0]) {
+		for (const p of awards.allDefensive[0].players) {
+			if (p.tid === g.get("userTid")) {
+				count += 1;
+			}
+		}
+	}
+
+	return count >= cutoff;
+};
+
+const checkAroundTheWorld = async (target: number) => {
+	const tidsWon = new Set();
+
+	const currentSeason = g.get("season");
+	for (
+		let season = g.get("startingSeason");
+		season <= currentSeason;
+		season++
+	) {
+		const tid = g.get("userTid", season);
+		if (tid >= 0) {
+			const teamSeason = await idb.getCopy.teamSeasons(
+				{
+					tid,
+					season,
+				},
+				"noCopyCache",
+			);
+			if (teamSeason) {
+				if (
+					teamSeason.playoffRoundsWon ===
+					g.get("numGamesPlayoffSeries", season).length
+				) {
+					tidsWon.add(tid);
+				}
+			}
+		}
+
+		// See if we're one short of the cutoff right before the current season. That's the only time we want to actually give this achievement, otherwise it will trigger every year after that too
+		if (season === currentSeason - 1 && tidsWon.size !== target - 1) {
+			return false;
+		}
+	}
+
+	return tidsWon.size === target;
+};
+
 const getUserSeed = async () => {
 	const playoffSeries = await idb.getCopy.playoffSeries(
 		{
@@ -254,11 +305,7 @@ const checkSevenGameFinals = async () => {
 
 	const matchup = playoffSeries?.series.at(-1)?.[0];
 
-	if (
-		matchup === undefined ||
-		matchup.home === undefined ||
-		matchup.away === undefined
-	) {
+	if (matchup === undefined || matchup.away === undefined) {
 		return false;
 	}
 
@@ -497,7 +544,7 @@ const achievements: Achievement[] = [
 	},
 	{
 		slug: "expansion",
-		name: "Expansion To Champion",
+		name: "Expansion to Champion",
 		desc: "Win a title as an expansion team within its first 5 seasons.",
 		category: "Season",
 
@@ -509,12 +556,24 @@ const achievements: Achievement[] = [
 	},
 	{
 		slug: "expansion_2",
-		name: "Expansion To Champion 2",
+		name: "Expansion to Champion 2",
 		desc: "Win a title as an expansion team within its first 3 seasons.",
 		category: "Season",
 
 		check() {
 			return checkExpansion(3);
+		},
+
+		when: "afterPlayoffs",
+	},
+	{
+		slug: "expansion_3",
+		name: "Expansion to Champion 3",
+		desc: "Win a title as an expansion team in its first season.",
+		category: "Season",
+
+		check() {
+			return checkExpansion(1);
 		},
 
 		when: "afterPlayoffs",
@@ -587,6 +646,42 @@ const achievements: Achievement[] = [
 
 		async check() {
 			return g.get("season") === g.get("startingSeason") + 9999;
+		},
+
+		when: "afterPlayoffs",
+	},
+	{
+		slug: "around_the_world",
+		name: "Around the World",
+		desc: "Win a championship with 2 franchises in a single league.",
+		category: "Multiple Seasons",
+
+		check() {
+			return checkAroundTheWorld(2);
+		},
+
+		when: "afterPlayoffs",
+	},
+	{
+		slug: "around_the_world_2",
+		name: "Around the World 2",
+		desc: "Win a championship with 10 franchises in a single league.",
+		category: "Multiple Seasons",
+
+		check() {
+			return checkAroundTheWorld(10);
+		},
+
+		when: "afterPlayoffs",
+	},
+	{
+		slug: "around_the_world_3",
+		name: "Around the World 3",
+		desc: "Win a championship with 30 franchises in a single league.",
+		category: "Multiple Seasons",
+
+		check() {
+			return checkAroundTheWorld(30);
 		},
 
 		when: "afterPlayoffs",
@@ -920,7 +1015,7 @@ const achievements: Achievement[] = [
 		name: "Hardware Store",
 		desc: bySport({
 			baseball:
-				"Players on your team win MVP, POY, ROY, ROY, and Finals MVP in the same season.",
+				"Players on your team win MVP, POY, ROY, RPOY, and Finals MVP in the same season.",
 			basketball:
 				"Players on your team win MVP, DPOY, SMOY, MIP, ROY, and Finals MVP in the same season.",
 			football:
@@ -941,8 +1036,7 @@ const achievements: Achievement[] = [
 					awards.mvp?.tid === userTid &&
 					awards.poy?.tid === userTid &&
 					awards.roy?.tid === userTid &&
-					awards.goy?.tid === userTid &&
-					awards.roy?.tid === userTid &&
+					awards.rpoy?.tid === userTid &&
 					awards.finalsMvp?.tid === userTid,
 				basketball:
 					awards &&
@@ -1164,6 +1258,49 @@ const achievements: Achievement[] = [
 
 		when: "afterPlayoffs",
 	},
+	{
+		slug: "revenge",
+		name: "Revenge",
+		desc: "Win in the finals against a team you used to control.",
+		category: "Playoffs",
+
+		async check() {
+			const wonTitle = await userWonTitle();
+
+			if (!wonTitle) {
+				return false;
+			}
+
+			const playoffSeries = await idb.cache.playoffSeries.get(g.get("season"));
+
+			const matchup = playoffSeries?.series.at(-1)?.[0];
+
+			if (matchup === undefined || matchup.away === undefined) {
+				return false;
+			}
+
+			const loserTid =
+				matchup.home.won > matchup.away.won
+					? matchup.away.tid
+					: matchup.home.tid;
+
+			const currentSeason = g.get("season");
+			for (
+				let season = g.get("startingSeason");
+				season < currentSeason;
+				season++
+			) {
+				const userTid = g.get("userTid", season);
+				if (userTid === loserTid) {
+					return true;
+				}
+			}
+
+			return false;
+		},
+
+		when: "afterPlayoffs",
+	},
 ];
 
 if (isSport("hockey") || isSport("basketball")) {
@@ -1213,7 +1350,6 @@ if (isSport("hockey") || isSport("basketball")) {
 				);
 
 				if (!playoffSeries || playoffSeries.series.length === 0) {
-					// Should only happen if playoffs are skipped
 					return false;
 				}
 
@@ -1456,19 +1592,20 @@ if (isSport("basketball")) {
 			desc: "Have 3+ players on the All-Defensive First Team.",
 			category: "Awards",
 
-			async check() {
-				let count = 0;
-				const awards = await idb.cache.awards.get(g.get("season"));
+			check() {
+				return checkBrickWall(3);
+			},
 
-				if (awards && awards.allDefensive && awards.allDefensive[0]) {
-					for (const p of awards.allDefensive[0].players) {
-						if (p.tid === g.get("userTid")) {
-							count += 1;
-						}
-					}
-				}
+			when: "afterAwards",
+		},
+		{
+			slug: "brick_wall_2",
+			name: "Brick Wall 2",
+			desc: "Have 5 players on the All-Defensive First Team.",
+			category: "Awards",
 
-				return count >= 3;
+			check() {
+				return checkBrickWall(5);
 			},
 
 			when: "afterAwards",
@@ -1716,6 +1853,11 @@ if (isSport("basketball")) {
 			season: 2023,
 			srIDs: ["SAS"],
 			name: "San Antonio",
+		},
+		{
+			season: 2024,
+			srIDs: ["POR"],
+			name: "Portland",
 		},
 	];
 

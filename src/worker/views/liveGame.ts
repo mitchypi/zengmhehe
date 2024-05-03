@@ -7,7 +7,7 @@ import {
 	type TeamSeasonOverride,
 } from "./gameLog";
 import type { AllStars, UpdateEvents, ViewInput } from "../../common/types";
-import { isSport, PHASE } from "../../common";
+import { bySport, isSport, PHASE, STARTING_NUM_TIMEOUTS } from "../../common";
 
 export const boxScoreToLiveSim = async ({
 	allStars,
@@ -44,6 +44,7 @@ export const boxScoreToLiveSim = async ({
 	boxScore.quarterShort = "";
 	boxScore.time = `${g.get("quarterLength")}:00`;
 	boxScore.gameOver = false;
+	delete boxScore.shootout;
 
 	for (let i = 0; i < boxScore.teams.length; i++) {
 		const t = boxScore.teams[i];
@@ -59,7 +60,10 @@ export const boxScoreToLiveSim = async ({
 				}
 			}
 		} else {
-			if (boxScore.won.pts === boxScore.lost.pts) {
+			if (
+				boxScore.won.pts === boxScore.lost.pts &&
+				boxScore.won.sPts === boxScore.lost.sPts
+			) {
 				// Tied!
 				if (t.tied !== undefined) {
 					t.tied -= 1;
@@ -84,6 +88,10 @@ export const boxScoreToLiveSim = async ({
 			}
 		}
 
+		// Special reset of shootout stats to undefined, since that is used in the UI to identify if we're in a shootout yet
+		delete t.sPts;
+		delete t.sAtt;
+
 		for (let j = 0; j < t.players.length; j++) {
 			const p = t.players[j];
 
@@ -93,11 +101,11 @@ export const boxScoreToLiveSim = async ({
 					? {
 							...p.injuryAtStart,
 							playingThrough: true,
-					  }
+						}
 					: {
 							type: "Healthy",
 							gamesRemaining: 0,
-					  };
+						};
 			}
 
 			for (const stat of resetStatsPlayer) {
@@ -111,22 +119,22 @@ export const boxScoreToLiveSim = async ({
 
 	// Swap teams order, so home team is at bottom in box score
 	boxScore.teams.reverse();
-	if (boxScore.scoringSummary) {
-		for (const event of boxScore.scoringSummary) {
-			event.t = event.t === 0 ? 1 : 0;
-		}
-	}
 
 	// For FBGM, build up scoringSummary from events, to handle deleting a score due to penalty
-	if (isSport("football")) {
+	if (
+		bySport({
+			baseball: true,
+			basketball: false,
+			football: true,
+			hockey: true,
+		})
+	) {
 		boxScore.scoringSummary = [];
 	}
 
-	// For ZGMH, if we don't start with events hidden, scoring summary flickers
-	if (isSport("hockey")) {
-		for (const event of boxScore.scoringSummary) {
-			event.hide = true;
-		}
+	if (STARTING_NUM_TIMEOUTS !== undefined) {
+		boxScore.teams[0].timeouts = STARTING_NUM_TIMEOUTS;
+		boxScore.teams[1].timeouts = STARTING_NUM_TIMEOUTS;
 	}
 
 	return {

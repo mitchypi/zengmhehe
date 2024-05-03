@@ -1,8 +1,10 @@
 import { idb } from "../db";
 import { g, helpers } from "../util";
 import { PHASE } from "../../common";
-import { team } from "../core";
+import { season, team } from "../core";
 import { orderBy } from "../../common/utils";
+import { getHistoryTeam } from "./teamHistory";
+import { getPlayoffsByConfBySeason } from "./frivolitiesTeamSeasons";
 
 export const getTeamOvr = async (tid: number) => {
 	const playersAll = await idb.cache.players.indexGetAll("playersByTid", tid);
@@ -18,10 +20,112 @@ export const getTeamOvr = async (tid: number) => {
 	return team.ovr(players);
 };
 
+const addHistoryAndPicksAndPlayers = async <T extends { tid: number }>(
+	teams: T[],
+) => {
+	const teamsAugmented = [];
+
+	const playoffsByConfBySeason = await getPlayoffsByConfBySeason();
+	for (const t of teams) {
+		const teamSeasons = await idb.getCopies.teamSeasons(
+			{
+				tid: t.tid,
+			},
+			"noCopyCache",
+		);
+
+		const historyTotal = getHistoryTeam(teamSeasons, playoffsByConfBySeason);
+		const historyUser = getHistoryTeam(
+			teamSeasons.filter(
+				teamSeason => g.get("userTid", teamSeason.season) === teamSeason.tid,
+			),
+			playoffsByConfBySeason,
+		);
+
+		const draftPicksRaw = await idb.getCopies.draftPicks(
+			{
+				tid: t.tid,
+			},
+			"noCopyCache",
+		);
+
+		const draftPicks = await Promise.all(
+			draftPicksRaw.map(async dp => {
+				return {
+					...dp,
+					desc: await helpers.pickDesc(dp),
+				};
+			}),
+		);
+
+		const playersRaw = await idb.cache.players.indexGetAll(
+			"playersByTid",
+			t.tid,
+		);
+		const players = orderBy(
+			await idb.getCopies.playersPlus(playersRaw, {
+				attrs: [
+					"pid",
+					"firstName",
+					"lastName",
+					"age",
+					"watch",
+					"value",
+					"draft",
+				],
+				ratings: ["ovr", "pot", "dovr", "dpot", "pos", "skills", "ovrs"],
+				season: g.get("season"),
+				fuzz: true,
+				showNoStats: true,
+				showRookies: true,
+			}),
+			"value",
+			"desc",
+		).slice(0, 5);
+
+		teamsAugmented.push({
+			...t,
+			total: {
+				won: historyTotal.totalWon,
+				lost: historyTotal.totalLost,
+				tied: historyTotal.totalTied,
+				otl: historyTotal.totalOtl,
+				winp: historyTotal.totalWinp,
+				finalsAppearances: historyTotal.finalsAppearances,
+				championships: historyTotal.championships,
+				lastChampionship: historyTotal.lastChampionship,
+			},
+			user: {
+				won: historyUser.totalWon,
+				lost: historyUser.totalLost,
+				tied: historyUser.totalTied,
+				otl: historyUser.totalOtl,
+				winp: historyUser.totalWinp,
+				finalsAppearances: historyUser.finalsAppearances,
+				championships: historyUser.championships,
+				lastChampionship: historyUser.lastChampionship,
+			},
+			draftPicks,
+			players,
+		});
+	}
+
+	return teamsAugmented;
+};
+
 const updateTeamSelect = async () => {
 	const rawTeams = await idb.getCopies.teamsPlus(
 		{
-			attrs: ["tid", "region", "name", "pop", "imgURL", "cid", "abbrev"],
+			attrs: [
+				"tid",
+				"region",
+				"name",
+				"pop",
+				"imgURL",
+				"imgURLSmall",
+				"cid",
+				"abbrev",
+			],
 			seasonAttrs: [
 				"winp",
 				"won",
@@ -80,13 +184,17 @@ const updateTeamSelect = async () => {
 		}
 	}
 
-	const finalTeams = orderedTeams.map(t => ({
+	const teamsWithOvr = orderedTeams.map(t => ({
 		...t,
 		ovr: 0,
 	}));
-	for (const t of finalTeams) {
+	for (const t of teamsWithOvr) {
 		t.ovr = await getTeamOvr(t.tid);
 	}
+
+	const finalTeams = await addHistoryAndPicksAndPlayers(teamsWithOvr);
+
+	const playoffsByConf = await season.getPlayoffsByConf(g.get("season"));
 
 	return {
 		challengeNoRatings: g.get("challengeNoRatings"),
@@ -99,6 +207,8 @@ const updateTeamSelect = async () => {
 		numPlayoffRounds: g.get("numGamesPlayoffSeries", "current").length,
 		otherTeamsWantToHire,
 		phase: g.get("phase"),
+		playoffsByConf,
+		season: g.get("season"),
 		teams: finalTeams,
 		userTid: g.get("userTid"),
 	};
